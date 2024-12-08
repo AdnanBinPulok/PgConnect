@@ -42,7 +42,7 @@ async def test_insert():
         cache_key="id",
     )
 
-    await users.delete({"email": "test@example.com"})
+    await users.delete(email= "test@example.com")
     
     await users.create()
     result = await users.insert(
