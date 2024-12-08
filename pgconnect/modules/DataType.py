@@ -229,7 +229,3 @@ class DataType:
     @classmethod
     def TSVECTOR(cls):
         return cls("TSVECTOR")
-
-# Example usage
-type_definition = DataType.SERIAL().primary_key().not_null().unique().default(1).check("value > 0").references("other_table", "id")
-print(type_definition)  # Output: SERIAL PRIMARY KEY NOT NULL UNIQUE DEFAULT 1 CHECK (value > 0) REFERENCES other_table(id)
