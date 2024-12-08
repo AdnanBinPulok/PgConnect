@@ -1,4 +1,4 @@
 from .Connection import *
-from .modules.DataType import *
-from .modules.Table import *
-from .modules.Column import *
+from .DataType import *
+from .Table import *
+from .Column import *

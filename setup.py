@@ -9,7 +9,7 @@ setup(
     long_description=open('readme.md').read(),
     long_description_content_type='text/markdown',
     url='https://github.com/AdnanBinPulok/PgConnect',
-    packages=find_packages(),
+    packages=find_packages(include=['pgconnect', 'pgconnect.*']),
     classifiers=[
         'Programming Language :: Python :: 3',
         'License :: OSI Approved :: MIT License',
