@@ -1,76 +1,235 @@
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
-
-# unchangable class DataType
 class DataType:
     """
     A class to represent PostgreSQL data types.
     """
-    # Numeric types
-    INT = "INTEGER"
-    SMALLINT = "SMALLINT"
-    BIGINT = "BIGINT"
-    SERIAL = "SERIAL"
-    BIGSERIAL = "BIGSERIAL"
-    REAL = "REAL"
-    DOUBLE_PRECISION = "DOUBLE PRECISION"
-    NUMERIC = "NUMERIC"
-    DECIMAL = "DECIMAL"
-    MONEY = "MONEY"
+    def __init__(self, type_name: str):
+        self.type_name = type_name
+        self.constraints = []
+        self.length = None
 
-    # Character types
-    TEXT = "TEXT"
-    VARCHAR = "VARCHAR"
-    CHAR = "CHAR"
+    def primary_key(self):
+        if self.type_name in ["TEXT", "BYTEA", "JSON", "JSONB", "ARRAY"]:
+            raise ValueError(f"{self.type_name} cannot be a primary key")
+        self.constraints.append("PRIMARY KEY")
+        return self
 
-    # Binary types
-    BYTEA = "BYTEA"
+    def not_null(self):
+        self.constraints.append("NOT NULL")
+        return self
 
-    # Date/time types
-    TIMESTAMP = "TIMESTAMP"
-    TIMESTAMPTZ = "TIMESTAMPTZ"  # Timestamp with timezone
-    DATE = "DATE"
-    TIME = "TIME"
-    TIMETZ = "TIMETZ"  # Time with timezone
-    INTERVAL = "INTERVAL"
+    def unique(self):
+        if self.type_name in ["TEXT", "BYTEA", "JSON", "JSONB", "ARRAY"]:
+            raise ValueError(f"{self.type_name} cannot be unique")
+        self.constraints.append("UNIQUE")
+        return self
 
-    # Boolean type
-    BOOLEAN = "BOOLEAN"
+    def default(self, value: Any):
+        if self.type_name in ["BYTEA", "JSON", "JSONB", "ARRAY"]:
+            raise ValueError(f"{self.type_name} cannot have a default value")
+        self.constraints.append(f"DEFAULT {value}")
+        return self
 
-    # UUID type
-    UUID = "UUID"
+    def check(self, condition: str):
+        self.constraints.append(f"CHECK ({condition})")
+        return self
 
-    # JSON types
-    JSON = "JSON"
-    JSONB = "JSONB"
+    def references(self, table: str, column: str):
+        if self.type_name in ["TEXT", "BYTEA", "JSON", "JSONB", "ARRAY"]:
+            raise ValueError(f"{self.type_name} cannot reference another table")
+        self.constraints.append(f"REFERENCES {table}({column})")
+        return self
 
-    # Network address types
-    CIDR = "CIDR"
-    INET = "INET"
-    MACADDR = "MACADDR"
+    def length(self, length: int):
+        if self.type_name not in ["VARCHAR", "CHAR"]:
+            raise ValueError(f"Length can only be set for VARCHAR and CHAR types")
+        self.type_name = f"{self.type_name}({length})"
+        return self
 
-    # Geometric types
-    POINT = "POINT"
-    LINE = "LINE"
-    LSEG = "LSEG"
-    BOX = "BOX"
-    PATH = "PATH"
-    POLYGON = "POLYGON"
-    CIRCLE = "CIRCLE"
+    def __str__(self):
+        return f"{self.type_name} {' '.join(self.constraints)}"
 
-    # Arrays
-    ARRAY = "ARRAY"
+    @classmethod
+    def INT(cls):
+        return cls("INTEGER")
 
-    # Range types
-    INT4RANGE = "INT4RANGE"
-    INT8RANGE = "INT8RANGE"
-    NUMRANGE = "NUMRANGE"
-    TSRANGE = "TSRANGE"  # Timestamp range
-    TSTZRANGE = "TSTZRANGE"  # Timestamp with time zone range
-    DATERANGE = "DATERANGE"
+    @classmethod
+    def SMALLINT(cls):
+        return cls("SMALLINT")
 
-    # Composite and special types
-    HSTORE = "HSTORE"  # Key-value store
-    XML = "XML"
-    TSQUERY = "TSQUERY"
-    TSVECTOR = "TSVECTOR"
+    @classmethod
+    def BIGINT(cls):
+        return cls("BIGINT")
+
+    @classmethod
+    def SERIAL(cls):
+        return cls("SERIAL")
+
+    @classmethod
+    def BIGSERIAL(cls):
+        return cls("BIGSERIAL")
+
+    @classmethod
+    def REAL(cls):
+        return cls("REAL")
+
+    @classmethod
+    def DOUBLE_PRECISION(cls):
+        return cls("DOUBLE PRECISION")
+
+    @classmethod
+    def NUMERIC(cls, precision: int = 10, scale: int = 0):
+        return cls(f"NUMERIC({precision}, {scale})")
+
+    @classmethod
+    def DECIMAL(cls, precision: int = 10, scale: int = 0):
+        return cls(f"DECIMAL({precision}, {scale})")
+
+    @classmethod
+    def MONEY(cls):
+        return cls("MONEY")
+
+    @classmethod
+    def TEXT(cls):
+        return cls("TEXT")
+
+    @classmethod
+    def VARCHAR(cls, length: int = 255):
+        return cls(f"VARCHAR({length})")
+
+    @classmethod
+    def CHAR(cls, length: int = 1):
+        return cls(f"CHAR({length})")
+
+    @classmethod
+    def BYTEA(cls):
+        return cls("BYTEA")
+
+    @classmethod
+    def TIMESTAMP(cls):
+        return cls("TIMESTAMP")
+
+    @classmethod
+    def TIMESTAMPTZ(cls):
+        return cls("TIMESTAMPTZ")
+
+    @classmethod
+    def DATE(cls):
+        return cls("DATE")
+
+    @classmethod
+    def TIME(cls):
+        return cls("TIME")
+
+    @classmethod
+    def TIMETZ(cls):
+        return cls("TIMETZ")
+
+    @classmethod
+    def INTERVAL(cls):
+        return cls("INTERVAL")
+
+    @classmethod
+    def BOOLEAN(cls):
+        return cls("BOOLEAN")
+
+    @classmethod
+    def UUID(cls):
+        return cls("UUID")
+
+    @classmethod
+    def JSON(cls):
+        return cls("JSON")
+
+    @classmethod
+    def JSONB(cls):
+        return cls("JSONB")
+
+    @classmethod
+    def CIDR(cls):
+        return cls("CIDR")
+
+    @classmethod
+    def INET(cls):
+        return cls("INET")
+
+    @classmethod
+    def MACADDR(cls):
+        return cls("MACADDR")
+
+    @classmethod
+    def POINT(cls):
+        return cls("POINT")
+
+    @classmethod
+    def LINE(cls):
+        return cls("LINE")
+
+    @classmethod
+    def LSEG(cls):
+        return cls("LSEG")
+
+    @classmethod
+    def BOX(cls):
+        return cls("BOX")
+
+    @classmethod
+    def PATH(cls):
+        return cls("PATH")
+
+    @classmethod
+    def POLYGON(cls):
+        return cls("POLYGON")
+
+    @classmethod
+    def CIRCLE(cls):
+        return cls("CIRCLE")
+
+    @classmethod
+    def ARRAY(cls, base_type: str):
+        return cls(f"{base_type}[]")
+
+    @classmethod
+    def INT4RANGE(cls):
+        return cls("INT4RANGE")
+
+    @classmethod
+    def INT8RANGE(cls):
+        return cls("INT8RANGE")
+
+    @classmethod
+    def NUMRANGE(cls):
+        return cls("NUMRANGE")
+
+    @classmethod
+    def TSRANGE(cls):
+        return cls("TSRANGE")
+
+    @classmethod
+    def TSTZRANGE(cls):
+        return cls("TSTZRANGE")
+
+    @classmethod
+    def DATERANGE(cls):
+        return cls("DATERANGE")
+
+    @classmethod
+    def HSTORE(cls):
+        return cls("HSTORE")
+
+    @classmethod
+    def XML(cls):
+        return cls("XML")
+
+    @classmethod
+    def TSQUERY(cls):
+        return cls("TSQUERY")
+
+    @classmethod
+    def TSVECTOR(cls):
+        return cls("TSVECTOR")
+
+# Example usage
+type_definition = DataType.SERIAL().primary_key().not_null().unique().default(1).check("value > 0").references("other_table", "id")
+print(type_definition)  # Output: SERIAL PRIMARY KEY NOT NULL UNIQUE DEFAULT 1 CHECK (value > 0) REFERENCES other_table(id)

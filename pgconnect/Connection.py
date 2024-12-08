@@ -3,7 +3,7 @@ import time
 
 
 class Connection:
-    connection = None
+    connection:asyncpg.Connection = None
     def __init__(
             self,
             host: str,
