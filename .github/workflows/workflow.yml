@@ -29,5 +29,11 @@ jobs:
         run: echo "PYTHONPATH=$PYTHONPATH:$(pwd)" >> $GITHUB_ENV
 
       - name: Run tests
+        env:
+          DB_HOST: aws-0-ap-southeast-1.pooler.supabase.com
+          DB_PORT: 6543
+          DB_USER: postgres.uvwiadlhpzkgygwyoxcs
+          DB_PASSWORD: PgConnect
+          DB_NAME: postgres
         run: |
           pytest

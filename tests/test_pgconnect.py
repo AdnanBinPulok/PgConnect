@@ -1,15 +1,16 @@
 import pytest
 import pgconnect
 import asyncio
+import os
 
 @pytest.mark.asyncio
 async def test_insert():
     connection = pgconnect.Connection(
-        host="your_host",
-        port=5432,
-        user="your_user",
-        password="your_password",
-        database="your_database"
+        host=os.getenv("DB_HOST"),
+        port=int(os.getenv("DB_PORT")),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD"),
+        database=os.getenv("DB_NAME")
     )
 
     users = pgconnect.Table(
