@@ -1,3 +1,4 @@
 asyncpg
 pytest
+pytest-asyncio
 flake8
