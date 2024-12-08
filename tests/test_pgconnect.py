@@ -41,6 +41,8 @@ async def test_insert():
         cache=True,
         cache_key="id",
     )
+
+    await users.delete()
     
     await users.create()
     result = await users.insert(
