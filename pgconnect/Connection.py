@@ -29,7 +29,7 @@ class Connection:
         if not self.connection:
             await self.connect()
         if isinstance(self.connection, asyncpg.pool.Pool):
-            return self.connection.acquire()
+            return self.connection
         else:
             return self.connection
         
