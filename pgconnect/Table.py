@@ -104,10 +104,11 @@ class Table:
             query += ",\n".join(column_definitions) + "\n);"
             await connection.execute(query, timeout=self.timeout)
         except asyncpg.PostgresError as e:
-            raise RuntimeError(f"Failed to create table {self.name}: {e}")
+            print(f"Failed to create table {self.name}: {e}")
+            return None
         except Exception as e:
             print(traceback.format_exc())
-            raise e
+            return None
         
     async def insert(self, **kwargs):
         """
@@ -138,12 +139,14 @@ class Table:
 
             return row
         except asyncpg.PostgresError as e:
-            raise RuntimeError(f"Failed to insert into table {self.name}: {e}")
+            print(f"Failed to insert into table {self.name}: {e}")
+            return None
         except ValueError as e:
-            raise e
+            print(f"ValueError: {e}")
+            return None
         except Exception as e:
             print(traceback.format_exc())
-            raise e
+            return None
         
     async def update(self, where: Dict[str, Any], **kwargs):
         """
@@ -176,12 +179,14 @@ class Table:
 
             return rows
         except asyncpg.PostgresError as e:
-            raise RuntimeError(f"Failed to update table {self.name}: {e}")
+            print(f"Failed to update table {self.name}: {e}")
+            return None
         except ValueError as e:
-            raise e
+            print(f"ValueError: {e}")
+            return None
         except Exception as e:
             print(traceback.format_exc())
-            raise e
+            return None
         
     async def delete(self, **where):
         """
@@ -211,12 +216,14 @@ class Table:
 
             return rows
         except asyncpg.PostgresError as e:
-            raise RuntimeError(f"Failed to delete from table {self.name}: {e}")
+            print(f"Failed to delete from table {self.name}: {e}")
+            return None
         except ValueError as e:
-            raise e
+            print(f"ValueError: {e}")
+            return None
         except Exception as e:
             print(traceback.format_exc())
-            raise e
+            return None
         
     async def select(self, *columns, **where):
         """
@@ -248,10 +255,11 @@ class Table:
                         self.caches[cache_key] = row
             return rows
         except asyncpg.PostgresError as e:
-            raise RuntimeError(f"Failed to select from table {self.name}: {e}")
+            print(f"Failed to select from table {self.name}: {e}")
+            return None
         except Exception as e:
             print(traceback.format_exc())
-            raise e
+            return None
         
     async def get(self, **where):
         """
@@ -262,15 +270,21 @@ class Table:
         :return: The selected row.
         """
         try:
+            # Validate and convert types
+            for column in self.columns:
+                if column.name in where:
+                    if isinstance(where[column.name], str) and column.type in ["INTEGER", "BIGINT"]:
+                        where[column.name] = int(where[column.name])
+                    elif isinstance(where[column.name], str) and column.type == "BOOLEAN":
+                        where[column.name] = where[column.name].lower() in ["true", "1", "yes"]
+
             cache_key = self._get_cache_key(**where)
             if self.cache and cache_key and cache_key in self.caches:
                 return self.caches[cache_key]
             
             where_clause = " AND ".join(f"{key} = ${i+1}" for i, key in enumerate(where.keys())) if where else "1=1"
             query = f"SELECT * FROM {self.name} WHERE {where_clause}"
-
             query_values = list(where.values())
-
             connection = await self._get_connection()
             row = await connection.fetchrow(query, *query_values, timeout=self.timeout)
 
@@ -280,10 +294,14 @@ class Table:
                     self.caches[cache_key] = row
             return row
         except asyncpg.PostgresError as e:
-            raise RuntimeError(f"Failed to get row from table {self.name}: {e}")
+            print(f"Failed to get row from table {self.name}: {e}")
+            return None
+        except ValueError as e:
+            print(f"ValueError: {e}")
+            return None
         except Exception as e:
             print(traceback.format_exc())
-            raise e
+            return None
         
     async def gets(self, **where):
         """
@@ -313,10 +331,11 @@ class Table:
                         self.caches[cache_key] = row
             return rows
         except asyncpg.PostgresError as e:
-            raise RuntimeError(f"Failed to get rows from table {self.name}: {e}")
+            print(f"Failed to get rows from table {self.name}: {e}")
+            return None
         except Exception as e:
             print(traceback.format_exc())
-            raise e
+            return None
         
     async def get_all(self):
         """
@@ -331,10 +350,11 @@ class Table:
             rows = await connection.fetch(query, timeout=self.timeout)
             return rows
         except asyncpg.PostgresError as e:
-            raise RuntimeError(f"Failed to get all rows from table {self.name}: {e}")
+            print(f"Failed to get all rows from table {self.name}: {e}")
+            return None
         except Exception as e:
             print(traceback.format_exc())
-            raise e
+            return None
         
     async def count(self, **where):
         """
@@ -354,10 +374,11 @@ class Table:
             count = await connection.fetchval(query, *query_values, timeout=self.timeout)
             return count
         except asyncpg.PostgresError as e:
-            raise RuntimeError(f"Failed to count rows in table {self.name}: {e}")
+            print(f"Failed to count rows in table {self.name}: {e}")
+            return None
         except Exception as e:
             print(traceback.format_exc())
-            raise e
+            return None
         
     async def exists(self, **where):
         """
@@ -377,10 +398,11 @@ class Table:
             exists = await connection.fetchval(query, *query_values, timeout=self.timeout)
             return exists
         except asyncpg.PostgresError as e:
-            raise RuntimeError(f"Failed to check existence in table {self.name}: {e}")
+            print(f"Failed to check existence in table {self.name}: {e}")
+            return None
         except Exception as e:
             print(traceback.format_exc())
-            raise e
+            return None
         
     async def get_columns(self):
         """
@@ -399,10 +421,11 @@ class Table:
             columns = await connection.fetch(query, timeout=self.timeout)
             return [{"name": column["column_name"], "type": column["data_type"]} for column in columns]
         except asyncpg.PostgresError as e:
-            raise RuntimeError(f"Failed to get columns for table {self.name}: {e}")
+            print(f"Failed to get columns for table {self.name}: {e}")
+            return None
         except Exception as e:
             print(traceback.format_exc())
-            raise e
+            return None
         
     def __repr__(self) -> str:
         return f"<Table {self.name}>"
@@ -459,10 +482,11 @@ class Table:
             query = f"DROP TABLE IF EXISTS {self.name};"
             await connection.execute(query, timeout=self.timeout)
         except asyncpg.PostgresError as e:
-            raise RuntimeError(f"Failed to drop table {self.name}: {e}")
+            print(f"Failed to drop table {self.name}: {e}")
+            return None
         except Exception as e:
             print(traceback.format_exc())
-            raise e
+            return None
         
     async def truncate(self):
         """
@@ -475,8 +499,8 @@ class Table:
             query = f"TRUNCATE TABLE {self.name};"
             await connection.execute(query, timeout=self.timeout)
         except asyncpg.PostgresError as e:
-            raise RuntimeError(f"Failed to truncate table {self.name}: {e}")
+            print(f"Failed to truncate table {self.name}: {e}")
+            return None
         except Exception as e:
             print(traceback.format_exc())
-            raise e
-        
+            return None
