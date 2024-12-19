@@ -26,7 +26,7 @@ class DataType:
         return self
 
     def default(self, value: Any):
-        if self.type_name in ["BYTEA", "JSON", "JSONB", "ARRAY"]:
+        if self.type_name in ["BYTEA", "ARRAY"]:
             raise ValueError(f"{self.type_name} cannot have a default value")
         self.constraints.append(f"DEFAULT {value}")
         return self
