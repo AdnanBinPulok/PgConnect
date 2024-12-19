@@ -1,4 +1,5 @@
 from typing import Any
+import json
 
 class DataType:
     """
@@ -28,9 +29,11 @@ class DataType:
     def default(self, value: Any):
         if self.type_name in ["BYTEA", "ARRAY"]:
             raise ValueError(f"{self.type_name} cannot have a default value")
-        self.constraints.append(f"DEFAULT {value}")
+        if self.type_name in ["JSON", "JSONB"]:
+            value = json.dumps(value)
+        self.constraints.append(f"DEFAULT '{value}'")
         return self
-
+    
     def check(self, condition: str):
         self.constraints.append(f"CHECK ({condition})")
         return self
