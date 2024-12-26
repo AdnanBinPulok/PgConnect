@@ -169,6 +169,7 @@ class Table:
             query_values = [kwargs[column.name] for column in filtered_columns] + list(where.values())
 
             connection = await self._get_connection()
+            print(f"query: {query}, query_values: {query_values}")
             rows = await connection.fetch(query, *query_values, timeout=self.timeout)
 
             if self.cache:
