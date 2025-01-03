@@ -411,22 +411,26 @@ class Table:
             print(traceback.format_exc())
             return None
     
-    async def get_page(self, page: int = 1, limit: int = 10, *where):
+    
+    async def get_page(self, page: int = 1, limit: int = 10, where: Dict[str, Any] = None, order_by: str = None, order: str = 'ASC'):
         """
         Gets a paginated set of rows from the table.
     
         :param page: The page number to retrieve.
         :param limit: The number of rows per page.
-        :param where: A list of tuples specifying the conditions for the rows to get.
+        :param where: A dictionary specifying the conditions for the rows to get.
+        :param order_by: The column to order the results by.
+        :param order: The order direction ('ASC' or 'DESC').
         :raises RuntimeError: If there is a database error.
         :return: The selected rows.
         """
         try:
             offset = (page - 1) * limit
-            where_clause = " AND ".join(f"{key} = ${i+1}" for i, (key, _) in enumerate(where)) if where else "1=1"
-            query = f"SELECT * FROM {self.name} WHERE {where_clause} LIMIT {limit} OFFSET {offset}"
+            where_clause = " AND ".join(f"{key} = ${i+1}" for i, key in enumerate(where.keys())) if where else "1=1"
+            order_clause = f"ORDER BY {order_by} {order}" if order_by else ""
+            query = f"SELECT * FROM {self.name} WHERE {where_clause} {order_clause} LIMIT {limit} OFFSET {offset}"
     
-            query_values = [value for _, value in where]
+            query_values = list(where.values()) if where else []
     
             connection = await self._get_connection()
             rows = await connection.fetch(query, *query_values, timeout=self.timeout)
@@ -443,7 +447,27 @@ class Table:
         except Exception as e:
             print(traceback.format_exc())
             return None
+    
+    async def query(self, query: str, *args):
+        """
+        Executes a custom query on the table.
 
+        :param query: The query to execute.
+        :param args: The query arguments.
+        :raises RuntimeError: If there is a database error.
+        :return: The query result.
+        """
+        try:
+            connection = await self._get_connection()
+            result = await connection.fetch(query, *args, timeout=self.timeout)
+            return result
+        except asyncpg.PostgresError as e:
+            print(f"Failed to execute query on table {self.name}: {e}")
+            return None
+        except Exception as e:
+            print(traceback.format_exc())
+            return None
+            
 
         
     async def get_columns(self):
