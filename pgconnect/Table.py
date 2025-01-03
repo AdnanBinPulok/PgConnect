@@ -411,22 +411,22 @@ class Table:
             print(traceback.format_exc())
             return None
     
-    async def get_page(self, page: int = 1, limit: int = 10, **where):
+    async def get_page(self, page: int = 1, limit: int = 10, *where):
         """
         Gets a paginated set of rows from the table.
     
         :param page: The page number to retrieve.
         :param limit: The number of rows per page.
-        :param where: A dictionary specifying the conditions for the rows to get.
+        :param where: A list of tuples specifying the conditions for the rows to get.
         :raises RuntimeError: If there is a database error.
         :return: The selected rows.
         """
         try:
             offset = (page - 1) * limit
-            where_clause = " AND ".join(f"{key} = ${i+1}" for i, key in enumerate(where.keys())) if where else "1=1"
+            where_clause = " AND ".join(f"{key} = ${i+1}" for i, (key, _) in enumerate(where)) if where else "1=1"
             query = f"SELECT * FROM {self.name} WHERE {where_clause} LIMIT {limit} OFFSET {offset}"
     
-            query_values = list(where.values())
+            query_values = [value for _, value in where]
     
             connection = await self._get_connection()
             rows = await connection.fetch(query, *query_values, timeout=self.timeout)
@@ -443,7 +443,6 @@ class Table:
         except Exception as e:
             print(traceback.format_exc())
             return None
-
 
 
         
