@@ -32,15 +32,14 @@ class Table:
         self.columns = columns
         self.cache = cache
         self.cache_key = cache_key
-        self.cache_ttl = cache_ttl
+        self.cache_ttl = cache_ttl if cache_ttl is not None else 0  # Ensure cache_ttl is a valid number
         self.cache_maxsize = cache_maxsize
         self._conn = None  # Initialize the connection attribute
         if cache and not cache_key:
             raise ValueError("cache_key must be provided if cache is enabled")
         
-        self.caches = TTLCache(maxsize=cache_maxsize, ttl=cache_ttl) if cache else None
+        self.caches = TTLCache(maxsize=cache_maxsize, ttl=self.cache_ttl) if cache else None
         self.timeout = 5  # Set the timeout to 5 seconds
-
     def clear_cache(self):
         """
         Clears the cache for the table.
