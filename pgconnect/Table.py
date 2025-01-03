@@ -49,9 +49,7 @@ class Table:
         self.caches.clear()
 
     async def _get_connection(self):
-        if self._conn is None or self._conn.is_closed():
-            self._conn = await self.connection.get_connection()
-        return self._conn
+        return await self.connection.get_connection()
 
     def _get_cache_key(self, **kwargs):
         """
@@ -115,6 +113,9 @@ class Table:
         except Exception as e:
             print(traceback.format_exc())
             return None
+        finally:
+            if connection and not isinstance(self.connection.connection, asyncpg.pool.Pool):
+                await connection.close()
         
     async def insert(self, **kwargs):
         """
@@ -153,7 +154,11 @@ class Table:
         except Exception as e:
             print(traceback.format_exc())
             return None
-        
+        finally:
+            if connection and not isinstance(self.connection.connection, asyncpg.pool.Pool):
+                await connection.close()
+
+
     async def update(self, where: Dict[str, Any], **kwargs):
         """
         Updates rows in the table.
@@ -193,7 +198,11 @@ class Table:
         except Exception as e:
             print(traceback.format_exc())
             return None
-        
+        finally:
+            if connection and not isinstance(self.connection.connection, asyncpg.pool.Pool):
+                await connection.close()
+
+                
     async def delete(self, **where):
         """
         Deletes rows from the table.
@@ -230,7 +239,11 @@ class Table:
         except Exception as e:
             print(traceback.format_exc())
             return None
-        
+        finally:
+            if connection and not isinstance(self.connection.connection, asyncpg.pool.Pool):
+                await connection.close()
+
+                
     async def select(self, *columns, **where):
         """
         Selects rows from the table.
@@ -266,7 +279,11 @@ class Table:
         except Exception as e:
             print(traceback.format_exc())
             return None
-        
+        finally:
+            if connection and not isinstance(self.connection.connection, asyncpg.pool.Pool):
+                await connection.close()
+
+                
     async def get(self, **where):
         """
         Gets a single row from the table.
@@ -308,7 +325,11 @@ class Table:
         except Exception as e:
             print(traceback.format_exc())
             return None
-        
+        finally:
+            if connection and not isinstance(self.connection.connection, asyncpg.pool.Pool):
+                await connection.close()
+
+                
     async def gets(self, **where):
         """
         Gets multiple rows from the table.
@@ -342,7 +363,11 @@ class Table:
         except Exception as e:
             print(traceback.format_exc())
             return None
-        
+        finally:
+            if connection and not isinstance(self.connection.connection, asyncpg.pool.Pool):
+                await connection.close()
+
+                
     async def get_all(self):
         """
         Gets all rows from the table.
@@ -361,7 +386,11 @@ class Table:
         except Exception as e:
             print(traceback.format_exc())
             return None
-        
+        finally:
+            if connection and not isinstance(self.connection.connection, asyncpg.pool.Pool):
+                await connection.close()
+
+                
     async def count(self, **where):
         """
         Counts the number of rows in the table.
@@ -385,7 +414,11 @@ class Table:
         except Exception as e:
             print(traceback.format_exc())
             return None
-        
+        finally:
+            if connection and not isinstance(self.connection.connection, asyncpg.pool.Pool):
+                await connection.close()
+
+                
     async def exists(self, **where):
         """
         Checks if any rows exist in the table that match the conditions.
@@ -409,7 +442,11 @@ class Table:
         except Exception as e:
             print(traceback.format_exc())
             return None
-    
+        finally:
+            if connection and not isinstance(self.connection.connection, asyncpg.pool.Pool):
+                await connection.close()
+
+                
     
     async def get_page(self, page: int = 1, limit: int = 10, where: Dict[str, Any] = None, order_by: str = None, order: str = 'ASC'):
         """
@@ -446,7 +483,11 @@ class Table:
         except Exception as e:
             print(traceback.format_exc())
             return None
-    
+        finally:
+            if connection and not isinstance(self.connection.connection, asyncpg.pool.Pool):
+                await connection.close()
+
+                
     async def query(self, query: str, *args):
         """
         Executes a custom query on the table.
@@ -466,7 +507,11 @@ class Table:
         except Exception as e:
             print(traceback.format_exc())
             return None
-            
+        finally:
+            if connection and not isinstance(self.connection.connection, asyncpg.pool.Pool):
+                await connection.close()
+
+                
 
         
     async def get_columns(self):
@@ -491,7 +536,11 @@ class Table:
         except Exception as e:
             print(traceback.format_exc())
             return None
-        
+        finally:
+            if connection and not isinstance(self.connection.connection, asyncpg.pool.Pool):
+                await connection.close()
+
+                
     def __repr__(self) -> str:
         return f"<Table {self.name}>"
 
@@ -552,7 +601,11 @@ class Table:
         except Exception as e:
             print(traceback.format_exc())
             return None
-        
+        finally:
+            if connection and not isinstance(self.connection.connection, asyncpg.pool.Pool):
+                await connection.close()
+
+                
     async def truncate(self):
         """
         Truncates the table to remove all rows.
@@ -569,3 +622,8 @@ class Table:
         except Exception as e:
             print(traceback.format_exc())
             return None
+        finally:
+            if connection and not isinstance(self.connection.connection, asyncpg.pool.Pool):
+                await connection.close()
+
+                
