@@ -3,6 +3,7 @@ import traceback
 from .Column import Column
 from typing import Optional, List, Any, Dict
 from pgconnect import Connection
+from cachetools import TTLCache
 
 class Table:
     def __init__(
@@ -11,7 +12,9 @@ class Table:
             connection: Connection,
             columns: List[Column],
             cache: bool = False,
-            cache_key: Optional[str] = None
+            cache_key: Optional[str] = None,
+            cache_ttl: Optional[int] = None,  # Change to Optional[int]
+            cache_maxsize: int = 1000
     ) -> None:
         """
         Initializes the Table object.
@@ -21,17 +24,21 @@ class Table:
         :param columns: A list of Column objects defining the table schema.
         :param cache: Whether to enable caching.
         :param cache_key: The key to use for caching.
+        :param cache_ttl: The time-to-live for cache entries in seconds.
+        :param cache_maxsize: The maximum size of the cache.
         """
         self.name = name
         self.connection: Connection = connection
         self.columns = columns
         self.cache = cache
         self.cache_key = cache_key
+        self.cache_ttl = cache_ttl
+        self.cache_maxsize = cache_maxsize
         self._conn = None  # Initialize the connection attribute
         if cache and not cache_key:
             raise ValueError("cache_key must be provided if cache is enabled")
         
-        self.caches = {}
+        self.caches = TTLCache(maxsize=cache_maxsize, ttl=cache_ttl) if cache else None
         self.timeout = 5  # Set the timeout to 5 seconds
 
     def clear_cache(self):
