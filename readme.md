@@ -14,7 +14,7 @@ PgConnect is a PostgreSQL connection and ORM library for Python. It provides an 
 You can install PgConnect using pip:
 
 ```bash
-pip install pgconnect
+pip install git+https://github.com/AdnanBinPulok/PgConnect.git
 ```
 
 ## Usage
