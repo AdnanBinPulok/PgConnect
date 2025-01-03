@@ -73,6 +73,8 @@ class Table:
                 for i in range(5):
                     if connection.is_in_transaction():
                         await asyncio.sleep(1)
+                    else:
+                        break
                 if connection.is_in_transaction():
                     raise Exception("Connection is busy")
             table_exists_query = f"""
@@ -150,6 +152,8 @@ class Table:
                 for i in range(5):
                     if connection.is_in_transaction():
                         await asyncio.sleep(1)
+                    else:
+                        break
                 if connection.is_in_transaction():
                     raise Exception("Connection is busy")
 
@@ -201,6 +205,8 @@ class Table:
                 for i in range(5):
                     if connection.is_in_transaction():
                         await asyncio.sleep(1)
+                    else:
+                        break
                 if connection.is_in_transaction():
                     raise Exception("Connection is busy")
             rows = await connection.fetch(query, *query_values, timeout=self.timeout)
@@ -249,6 +255,8 @@ class Table:
                 for i in range(5):
                     if connection.is_in_transaction():
                         await asyncio.sleep(1)
+                    else:
+                        break
                 if connection.is_in_transaction():
                     raise Exception("Connection is busy")
             rows = await connection.fetch(query, *query_values, timeout=self.timeout)
@@ -300,6 +308,8 @@ class Table:
                 for i in range(5):
                     if connection.is_in_transaction():
                         await asyncio.sleep(1)
+                    else:
+                        break
                 if connection.is_in_transaction():
                     raise Exception("Connection is busy")
             rows = await connection.fetch(query, *query_values, timeout=self.timeout)
@@ -351,6 +361,8 @@ class Table:
                 for i in range(5):
                     if connection.is_in_transaction():
                         await asyncio.sleep(1)
+                    else:
+                        break
                 if connection.is_in_transaction():
                     raise Exception("Connection is busy")
             row = await connection.fetchrow(query, *query_values, timeout=self.timeout)
@@ -398,6 +410,8 @@ class Table:
                 for i in range(5):
                     if connection.is_in_transaction():
                         await asyncio.sleep(1)
+                    else:
+                        break
                 if connection.is_in_transaction():
                     raise Exception("Connection is busy")
             rows = await connection.fetch(query, *query_values, timeout=self.timeout)
@@ -434,6 +448,8 @@ class Table:
                 for i in range(5):
                     if connection.is_in_transaction():
                         await asyncio.sleep(1)
+                    else:
+                        break
                 if connection.is_in_transaction():
                     raise Exception("Connection is busy")
             rows = await connection.fetch(query, timeout=self.timeout)
@@ -469,6 +485,8 @@ class Table:
                 for i in range(5):
                     if connection.is_in_transaction():
                         await asyncio.sleep(1)
+                    else:
+                        break
                 if connection.is_in_transaction():
                     raise Exception("Connection is busy")
             count = await connection.fetchval(query, *query_values, timeout=self.timeout)
@@ -504,6 +522,8 @@ class Table:
                 for i in range(5):
                     if connection.is_in_transaction():
                         await asyncio.sleep(1)
+                    else:
+                        break
                 if connection.is_in_transaction():
                     raise Exception("Connection is busy")
             exists = await connection.fetchval(query, *query_values, timeout=self.timeout)
@@ -546,6 +566,8 @@ class Table:
                 for i in range(5):
                     if connection.is_in_transaction():
                         await asyncio.sleep(1)
+                    else:
+                        break
                 if connection.is_in_transaction():
                     raise Exception("Connection is busy")
             rows = await connection.fetch(query, *query_values, timeout=self.timeout)
@@ -583,6 +605,8 @@ class Table:
                 for i in range(5):
                     if connection.is_in_transaction():
                         await asyncio.sleep(1)
+                    else:
+                        break
                 if connection.is_in_transaction():
                     raise Exception("Connection is busy")
             result = await connection.fetch(query, *args, timeout=self.timeout)
@@ -619,6 +643,8 @@ class Table:
                 for i in range(5):
                     if connection.is_in_transaction():
                         await asyncio.sleep(1)
+                    else:
+                        break
                 if connection.is_in_transaction():
                     raise Exception("Connection is busy")
             columns = await connection.fetch(query, timeout=self.timeout)
@@ -691,6 +717,8 @@ class Table:
                 for i in range(5):
                     if connection.is_in_transaction():
                         await asyncio.sleep(1)
+                    else:
+                        break
                 if connection.is_in_transaction():
                     raise Exception("Connection is busy")
             query = f"DROP TABLE IF EXISTS {self.name};"
@@ -719,6 +747,8 @@ class Table:
                 for i in range(5):
                     if connection.is_in_transaction():
                         await asyncio.sleep(1)
+                    else:
+                        break
                 if connection.is_in_transaction():
                     raise Exception("Connection is busy")
             query = f"TRUNCATE TABLE {self.name};"
