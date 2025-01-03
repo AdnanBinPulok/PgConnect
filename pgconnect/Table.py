@@ -114,7 +114,7 @@ class Table:
             print(traceback.format_exc())
             return None
         finally:
-            if connection and not isinstance(self.connection.connection, asyncpg.pool.Pool):
+            if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.close()
         
     async def insert(self, **kwargs):
@@ -155,7 +155,7 @@ class Table:
             print(traceback.format_exc())
             return None
         finally:
-            if connection and not isinstance(self.connection.connection, asyncpg.pool.Pool):
+            if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.close()
 
 
@@ -199,7 +199,7 @@ class Table:
             print(traceback.format_exc())
             return None
         finally:
-            if connection and not isinstance(self.connection.connection, asyncpg.pool.Pool):
+            if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.close()
 
                 
@@ -240,7 +240,7 @@ class Table:
             print(traceback.format_exc())
             return None
         finally:
-            if connection and not isinstance(self.connection.connection, asyncpg.pool.Pool):
+            if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.close()
 
                 
@@ -280,7 +280,7 @@ class Table:
             print(traceback.format_exc())
             return None
         finally:
-            if connection and not isinstance(self.connection.connection, asyncpg.pool.Pool):
+            if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.close()
 
                 
@@ -326,7 +326,7 @@ class Table:
             print(traceback.format_exc())
             return None
         finally:
-            if connection and not isinstance(self.connection.connection, asyncpg.pool.Pool):
+            if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.close()
 
                 
@@ -364,7 +364,7 @@ class Table:
             print(traceback.format_exc())
             return None
         finally:
-            if connection and not isinstance(self.connection.connection, asyncpg.pool.Pool):
+            if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.close()
 
                 
@@ -387,7 +387,7 @@ class Table:
             print(traceback.format_exc())
             return None
         finally:
-            if connection and not isinstance(self.connection.connection, asyncpg.pool.Pool):
+            if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.close()
 
                 
@@ -415,7 +415,7 @@ class Table:
             print(traceback.format_exc())
             return None
         finally:
-            if connection and not isinstance(self.connection.connection, asyncpg.pool.Pool):
+            if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.close()
 
                 
@@ -443,7 +443,7 @@ class Table:
             print(traceback.format_exc())
             return None
         finally:
-            if connection and not isinstance(self.connection.connection, asyncpg.pool.Pool):
+            if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.close()
 
                 
@@ -484,7 +484,7 @@ class Table:
             print(traceback.format_exc())
             return None
         finally:
-            if connection and not isinstance(self.connection.connection, asyncpg.pool.Pool):
+            if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.close()
 
                 
@@ -508,7 +508,7 @@ class Table:
             print(traceback.format_exc())
             return None
         finally:
-            if connection and not isinstance(self.connection.connection, asyncpg.pool.Pool):
+            if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.close()
 
                 
@@ -537,7 +537,7 @@ class Table:
             print(traceback.format_exc())
             return None
         finally:
-            if connection and not isinstance(self.connection.connection, asyncpg.pool.Pool):
+            if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.close()
 
                 
@@ -602,7 +602,7 @@ class Table:
             print(traceback.format_exc())
             return None
         finally:
-            if connection and not isinstance(self.connection.connection, asyncpg.pool.Pool):
+            if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.close()
 
                 
@@ -623,7 +623,7 @@ class Table:
             print(traceback.format_exc())
             return None
         finally:
-            if connection and not isinstance(self.connection.connection, asyncpg.pool.Pool):
+            if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.close()
 
                 
