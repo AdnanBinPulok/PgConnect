@@ -2,14 +2,15 @@ from setuptools import setup, find_packages
 
 setup(
     name='pgconnect',
-    version='0.1.0',
+    version='0.0.1',
     author='AdnanBinPulok',
     author_email='adnanbinpulok@gmail.com',
     description='A PostgreSQL connection and ORM library',
     long_description=open('readme.md').read(),
     long_description_content_type='text/markdown',
     url='https://github.com/AdnanBinPulok/PgConnect',
-    packages=find_packages(include=['pgconnect', 'pgconnect.*']),
+    packages=find_packages(where='src', include=['pgconnect', 'pgconnect.*']),
+    package_dir={'': 'src'},
     classifiers=[
         'Programming Language :: Python :: 3',
         'License :: OSI Approved :: MIT License',

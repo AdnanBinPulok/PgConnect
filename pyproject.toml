@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "pgconnect"
+version = "0.0.3"
+authors = [
+  { name="Adnan Bin Pulok", email="adnanbinpulok@gmail.com" },
+]
+description = "A PostgreSQL connection and ORM library"
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/adnanbinpulok"
+GitHub= "https://github.com/adnanbinpulok/pgconnect"
+Issues = "https://github.com/adnanbinpulok/pgconnect/issues"

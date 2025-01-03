@@ -1,0 +1,15 @@
+LICENSE
+README.md
+pyproject.toml
+setup.py
+src/pgconnect/Column.py
+src/pgconnect/Connection.py
+src/pgconnect/DataType.py
+src/pgconnect/Table.py
+src/pgconnect/__init__.py
+src/pgconnect/examples.py
+src/pgconnect.egg-info/PKG-INFO
+src/pgconnect.egg-info/SOURCES.txt
+src/pgconnect.egg-info/dependency_links.txt
+src/pgconnect.egg-info/top_level.txt
+tests/test_pgconnect.py
