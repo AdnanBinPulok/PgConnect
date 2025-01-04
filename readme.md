@@ -14,8 +14,62 @@ PgConnect is a PostgreSQL connection and ORM library for Python. It provides an 
 You can install PgConnect using pip:
 
 ```bash
-pip install git+https://github.com/AdnanBinPulok/PgConnect.git
+pip install pgconnect
 ```
+
+## Caching
+
+Caching in `PgConnect` is designed to improve performance by reducing the number of database queries for frequently accessed data. When caching is enabled, the library stores query results in memory (or another caching backend) to serve future requests faster.
+
+### **Benefits of Caching**
+
+1. **Reduced Latency:** Queries can be served directly from the cache, reducing the time spent waiting for a response from the database.
+2. **Lower Database Load:** Cached results reduce the number of queries sent to the database, freeing up resources for other operations.
+3. **Improved Scalability:** Applications with high read-heavy traffic can benefit from caching to handle a larger number of requests efficiently.
+
+### **When to Use Caching**
+
+- For frequently read data that does not change often.
+- To improve the performance of applications with high traffic and concurrent requests.
+- To optimize expensive database queries.
+
+### **Caching Example**
+
+Here’s an example showing how caching can improve performance:
+
+```python
+# Enable caching for the table with a cache key
+users = pgconnect.Table(
+    name="users",
+    connection=connection,
+    columns=[
+        pgconnect.Column(name="id", type=pgconnect.DataType.SERIAL().primary_key().not_null()),
+        pgconnect.Column(name="email", type=pgconnect.DataType.VARCHAR().unique().not_null()),
+        pgconnect.Column(name="username", type=pgconnect.DataType.VARCHAR()),
+        pgconnect.Column(name="password", type=pgconnect.DataType.TEXT()),
+        pgconnect.Column(name="created_at", type=pgconnect.DataType.TIMESTAMP().default("NOW()")),
+    ],
+    cache=True,  # Enable caching
+    cache_key="id",  # Specify cache key for lookups
+    cache_ttl=60  # Cache TTL in seconds (optional, default is no expiry)
+    cache_maxsize=1000  # Maximum number of items in the cache (optional, default is 1000)
+)
+
+# First query - data fetched from the database and stored in cache
+user = await users.select("id", "username", email="example@gmail.com")
+print("Fetched from database:", user)
+
+# Subsequent query with the same parameters - data fetched from cache
+cached_user = await users.select("id", "username", email="example@gmail.com")
+print("Fetched from cache:", cached_user)
+```
+
+Performance Comparison:
+
+- Without Caching: Each query triggers a request to the PostgreSQL server, which involves network overhead and database processing time.
+- With Caching: After the first query, subsequent requests with the same parameters are served from the cache, reducing query time from milliseconds to microseconds.
+
+By using caching strategically in your application, you can significantly improve response times and reduce database workload.
 
 ## Usage
 
@@ -61,7 +115,7 @@ async def main():
             )
         ],
         cache=True,
-        cache_key="id",
+        cache_key="id"
     )
 
     await users.create()
