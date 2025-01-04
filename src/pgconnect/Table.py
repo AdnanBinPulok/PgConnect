@@ -292,6 +292,8 @@ class Table:
         :return: The selected rows.
         """
         try:
+
+            connection = await self._get_connection()
             cache_key = self._get_cache_key(**where)
             if self.cache and cache_key and cache_key in self.caches:
                 return [self.caches[cache_key]]
@@ -301,8 +303,6 @@ class Table:
             query = f"SELECT {columns_clause} FROM {self.name} WHERE {where_clause}"
             
             query_values = list(where.values())
-
-            connection = await self._get_connection()
             # if connection is busy wait 1 second and try again
             if not isinstance(self.connection.connection, asyncpg.pool.Pool):
                 for i in range(5):
@@ -340,6 +340,7 @@ class Table:
         :return: The selected row.
         """
         try:
+
             # Validate and convert types
             for column in self.columns:
                 if column.name in where:
@@ -348,6 +349,8 @@ class Table:
                     elif isinstance(where[column.name], str) and column.type == "BOOLEAN":
                         where[column.name] = where[column.name].lower() in ["true", "1", "yes"]
 
+            connection = await self._get_connection()
+
             cache_key = self._get_cache_key(**where)
             if self.cache and cache_key and cache_key in self.caches:
                 return self.caches[cache_key]
@@ -355,7 +358,6 @@ class Table:
             where_clause = " AND ".join(f"{key} = ${i+1}" for i, key in enumerate(where.keys())) if where else "1=1"
             query = f"SELECT * FROM {self.name} WHERE {where_clause}"
             query_values = list(where.values())
-            connection = await self._get_connection()
             # if connection is busy wait 1 second and try again
             if not isinstance(self.connection.connection, asyncpg.pool.Pool):
                 for i in range(5):
@@ -395,6 +397,7 @@ class Table:
         :return: The selected rows.
         """
         try:
+            connection = await self._get_connection()
             cache_key = self._get_cache_key(**where)
             if self.cache and cache_key and cache_key in self.caches:
                 return [self.caches[cache_key]]
@@ -404,7 +407,6 @@ class Table:
 
             query_values = list(where.values())
 
-            connection = await self._get_connection()
             # if connection is busy wait 1 second and try again
             if not isinstance(self.connection.connection, asyncpg.pool.Pool):
                 for i in range(5):
@@ -559,7 +561,6 @@ class Table:
             query = f"SELECT * FROM {self.name} WHERE {where_clause} {order_clause} LIMIT {limit} OFFSET {offset}"
     
             query_values = list(where.values()) if where else []
-    
             connection = await self._get_connection()
             # if connection is busy wait 1 second and try again
             if not isinstance(self.connection.connection, asyncpg.pool.Pool):
