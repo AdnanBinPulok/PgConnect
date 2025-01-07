@@ -589,6 +589,39 @@ class Table:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.close()
 
+    async def search(self, by: Optional[list], keyword: str, limit: int = 10):
+        try:
+            if not by:
+                raise ValueError("No columns provided for search")
+            where_clause = " OR ".join(f"{column} ILIKE $1" for column in by)
+            query = f"SELECT * FROM {self.name} WHERE {where_clause} LIMIT {limit}"
+            query_values = [f"%{keyword}%"]
+            connection = await self._get_connection()
+            # if connection is busy wait 1 second and try again
+            if not isinstance(self.connection.connection, asyncpg.pool.Pool):
+                for i in range(5):
+                    if connection.is_in_transaction():
+                        await asyncio.sleep(1)
+                    else:
+                        break
+                if connection.is_in_transaction():
+                    raise Exception("Connection is busy")
+            rows = await connection.fetch(query, *query_values, timeout=self.timeout)
+            return rows
+
+        except asyncpg.PostgresError as e:
+            print(f"Failed to search table {self.name}: {e}")
+            return None
+        except ValueError as e:
+            print(f"ValueError: {e}")
+            return None
+        except Exception as e:
+            print(traceback.format_exc())
+            return None
+        finally:
+            if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
+                await connection.close()
+
                 
     async def query(self, query: str, *args):
         """
