@@ -590,6 +590,13 @@ class Table:
                 await connection.close()
 
     async def search(self, by: Optional[list], keyword: str, limit: int = 10):
+        """
+        Searches the table for a keyword in the specified columns.
+
+        :param by: The columns to search.
+        :param keyword: The keyword to search for.
+        :param limit: The maximum number of rows to return.
+        """
         try:
             if not by:
                 raise ValueError("No columns provided for search")
