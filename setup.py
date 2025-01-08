@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='pgconnect',
-    version='0.0.8',
+    version='0.0.9',
     author='AdnanBinPulok',
     author_email='adnanbinpulok@gmail.com',
     description='A PostgreSQL connection and ORM library',

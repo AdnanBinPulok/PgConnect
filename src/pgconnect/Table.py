@@ -589,7 +589,8 @@ class Table:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.close()
 
-    async def search(self, by: Optional[list], keyword: str, limit: int = 10, where: Dict[str, Any] = None):
+    
+    async def search(self, by: Optional[list], keyword: str, limit: int = 10, where: Dict[str, Any] = None, order_by: str = 'id', order: str = 'ASC'):
         """
         Searches the table for a keyword in the specified columns.
     
@@ -597,6 +598,8 @@ class Table:
         :param keyword: The keyword to search for.
         :param limit: The maximum number of rows to return.
         :param where: Additional conditions for the search.
+        :param order_by: The column to order the results by.
+        :param order: The order direction (ASC or DESC).
         """
         try:
             if not by:
@@ -611,7 +614,7 @@ class Table:
                 where_clause = f"({where_clause}) AND {additional_conditions}"
                 query_values.extend(where.values())
             
-            query = f"SELECT * FROM {self.name} WHERE {where_clause} LIMIT {limit}"
+            query = f"SELECT * FROM {self.name} WHERE {where_clause} ORDER BY {order_by} {order} LIMIT {limit}"
             
             connection = await self._get_connection()
             # if connection is busy wait 1 second and try again
