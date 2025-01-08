@@ -589,20 +589,30 @@ class Table:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.close()
 
-    async def search(self, by: Optional[list], keyword: str, limit: int = 10):
+    async def search(self, by: Optional[list], keyword: str, limit: int = 10, where: Dict[str, Any] = None):
         """
         Searches the table for a keyword in the specified columns.
-
+    
         :param by: The columns to search.
         :param keyword: The keyword to search for.
         :param limit: The maximum number of rows to return.
+        :param where: Additional conditions for the search.
         """
         try:
             if not by:
                 raise ValueError("No columns provided for search")
+            
             where_clause = " OR ".join(f"{column} ILIKE $1" for column in by)
-            query = f"SELECT * FROM {self.name} WHERE {where_clause} LIMIT {limit}"
+            
             query_values = [f"%{keyword}%"]
+            
+            if where:
+                additional_conditions = " AND ".join(f"{key} = ${i+2}" for i, key in enumerate(where.keys()))
+                where_clause = f"({where_clause}) AND {additional_conditions}"
+                query_values.extend(where.values())
+            
+            query = f"SELECT * FROM {self.name} WHERE {where_clause} LIMIT {limit}"
+            
             connection = await self._get_connection()
             # if connection is busy wait 1 second and try again
             if not isinstance(self.connection.connection, asyncpg.pool.Pool):
@@ -613,9 +623,10 @@ class Table:
                         break
                 if connection.is_in_transaction():
                     raise Exception("Connection is busy")
+            
             rows = await connection.fetch(query, *query_values, timeout=self.timeout)
             return rows
-
+    
         except asyncpg.PostgresError as e:
             print(f"Failed to search table {self.name}: {e}")
             return None
