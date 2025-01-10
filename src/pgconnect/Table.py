@@ -58,7 +58,7 @@ class Table:
         """
         if self.cache_key:
             if self.cache_key in [column.name for column in self.columns]:
-                return str(kwargs.get(self.cache_key))
+                return str(kwargs.get(self.cache_key)) if self.cache_key in kwargs else None
         return None
 
     async def create(self):
