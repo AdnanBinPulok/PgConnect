@@ -114,7 +114,10 @@ class Table:
             column_definitions = []
             for column in self.columns:
                 column: Column
-                column_definitions.append(f"{column.name} {column.type}")
+                column_def = f"{column.name} {column.type}"
+                if column.default:
+                    column_def += f" DEFAULT {column.default}"
+                column_definitions.append(column_def)
             query += ",\n".join(column_definitions) + "\n);"
             await connection.execute(query, timeout=self.timeout)
         except asyncpg.PostgresError as e:
