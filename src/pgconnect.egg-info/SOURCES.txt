@@ -11,5 +11,6 @@ src/pgconnect/examples.py
 src/pgconnect.egg-info/PKG-INFO
 src/pgconnect.egg-info/SOURCES.txt
 src/pgconnect.egg-info/dependency_links.txt
+src/pgconnect.egg-info/requires.txt
 src/pgconnect.egg-info/top_level.txt
 tests/test_pgconnect.py

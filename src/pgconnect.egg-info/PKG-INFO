@@ -1,6 +1,6 @@
 Metadata-Version: 2.2
 Name: pgconnect
-Version: 0.1.0
+Version: 0.1.2
 Summary: A PostgreSQL connection and ORM library
 Home-page: https://github.com/AdnanBinPulok/PgConnect
 Author: AdnanBinPulok
@@ -14,6 +14,8 @@ Classifier: Operating System :: OS Independent
 Requires-Python: >=3.6
 Description-Content-Type: text/markdown
 License-File: LICENSE
+Requires-Dist: asyncpg
+Requires-Dist: cachetools
 Dynamic: author
 Dynamic: home-page
 Dynamic: requires-python
