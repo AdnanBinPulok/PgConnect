@@ -60,6 +60,20 @@ class Table:
             if self.cache_key in [column.name for column in self.columns]:
                 return str(kwargs.get(self.cache_key)) if self.cache_key in kwargs else None
         return None
+    
+    async def ensure_connection_available(self, connection):
+        """
+        Ensure the connection is available by checking if it is in a transaction.
+        If the connection is busy, wait for a short period and retry.
+        """
+        if not isinstance(self.connection.connection, asyncpg.pool.Pool):
+            for i in range(5):
+                if connection.is_in_transaction():
+                    await asyncio.sleep(1)  # Wait for 1 second before retrying
+                else:
+                    break
+            if connection.is_in_transaction():
+                raise Exception("Connection is still busy after multiple retries")
 
     async def create(self):
         """
@@ -69,14 +83,7 @@ class Table:
         try:
             connection = await self._get_connection()
             # if connection is busy wait 1 second and try again
-            if not isinstance(self.connection.connection, asyncpg.pool.Pool):
-                for i in range(5):
-                    if connection.is_in_transaction():
-                        await asyncio.sleep(1)
-                    else:
-                        break
-                if connection.is_in_transaction():
-                    raise Exception("Connection is busy")
+            await self.ensure_connection_available(connection)
             table_exists_query = f"""
             SELECT EXISTS (
                 SELECT FROM information_schema.tables 
@@ -148,14 +155,7 @@ class Table:
 
             connection = await self._get_connection()
             # if connection is busy wait 1 second and try again
-            if not isinstance(self.connection.connection, asyncpg.pool.Pool):
-                for i in range(5):
-                    if connection.is_in_transaction():
-                        await asyncio.sleep(1)
-                    else:
-                        break
-                if connection.is_in_transaction():
-                    raise Exception("Connection is busy")
+            await self.ensure_connection_available(connection)
 
             row = await connection.fetchrow(query, *query_values, timeout=self.timeout)
 
@@ -201,14 +201,7 @@ class Table:
 
             connection = await self._get_connection()
             # if connection is busy wait 1 second and try again
-            if not isinstance(self.connection.connection, asyncpg.pool.Pool):
-                for i in range(5):
-                    if connection.is_in_transaction():
-                        await asyncio.sleep(1)
-                    else:
-                        break
-                if connection.is_in_transaction():
-                    raise Exception("Connection is busy")
+            await self.ensure_connection_available(connection)
             rows = await connection.fetch(query, *query_values, timeout=self.timeout)
 
             if self.cache:
@@ -251,14 +244,7 @@ class Table:
 
             connection = await self._get_connection()
             # if connection is busy wait 1 second and try again
-            if not isinstance(self.connection.connection, asyncpg.pool.Pool):
-                for i in range(5):
-                    if connection.is_in_transaction():
-                        await asyncio.sleep(1)
-                    else:
-                        break
-                if connection.is_in_transaction():
-                    raise Exception("Connection is busy")
+            await self.ensure_connection_available(connection)
             rows = await connection.fetch(query, *query_values, timeout=self.timeout)
 
             if self.cache:
@@ -304,14 +290,7 @@ class Table:
             
             query_values = list(where.values())
             # if connection is busy wait 1 second and try again
-            if not isinstance(self.connection.connection, asyncpg.pool.Pool):
-                for i in range(5):
-                    if connection.is_in_transaction():
-                        await asyncio.sleep(1)
-                    else:
-                        break
-                if connection.is_in_transaction():
-                    raise Exception("Connection is busy")
+            await self.ensure_connection_available(connection)
             rows = await connection.fetch(query, *query_values, timeout=self.timeout)
 
             if self.cache:
@@ -359,14 +338,7 @@ class Table:
             query = f"SELECT * FROM {self.name} WHERE {where_clause}"
             query_values = list(where.values())
             # if connection is busy wait 1 second and try again
-            if not isinstance(self.connection.connection, asyncpg.pool.Pool):
-                for i in range(5):
-                    if connection.is_in_transaction():
-                        await asyncio.sleep(1)
-                    else:
-                        break
-                if connection.is_in_transaction():
-                    raise Exception("Connection is busy")
+            await self.ensure_connection_available(connection)
             row = await connection.fetchrow(query, *query_values, timeout=self.timeout)
 
             if self.cache and row:
@@ -408,14 +380,7 @@ class Table:
             query_values = list(where.values())
 
             # if connection is busy wait 1 second and try again
-            if not isinstance(self.connection.connection, asyncpg.pool.Pool):
-                for i in range(5):
-                    if connection.is_in_transaction():
-                        await asyncio.sleep(1)
-                    else:
-                        break
-                if connection.is_in_transaction():
-                    raise Exception("Connection is busy")
+            await self.ensure_connection_available(connection)
             rows = await connection.fetch(query, *query_values, timeout=self.timeout)
 
             if self.cache:
@@ -446,14 +411,7 @@ class Table:
             query = f"SELECT * FROM {self.name}"
             connection = await self._get_connection()
             # if connection is busy wait 1 second and try again
-            if not isinstance(self.connection.connection, asyncpg.pool.Pool):
-                for i in range(5):
-                    if connection.is_in_transaction():
-                        await asyncio.sleep(1)
-                    else:
-                        break
-                if connection.is_in_transaction():
-                    raise Exception("Connection is busy")
+            await self.ensure_connection_available(connection)
             rows = await connection.fetch(query, timeout=self.timeout)
             return rows
         except asyncpg.PostgresError as e:
@@ -483,14 +441,7 @@ class Table:
 
             connection = await self._get_connection()
             # if connection is busy wait 1 second and try again
-            if not isinstance(self.connection.connection, asyncpg.pool.Pool):
-                for i in range(5):
-                    if connection.is_in_transaction():
-                        await asyncio.sleep(1)
-                    else:
-                        break
-                if connection.is_in_transaction():
-                    raise Exception("Connection is busy")
+            await self.ensure_connection_available(connection)
             count = await connection.fetchval(query, *query_values, timeout=self.timeout)
             return count
         except asyncpg.PostgresError as e:
@@ -520,14 +471,7 @@ class Table:
 
             connection = await self._get_connection()
             # if connection is busy wait 1 second and try again
-            if not isinstance(self.connection.connection, asyncpg.pool.Pool):
-                for i in range(5):
-                    if connection.is_in_transaction():
-                        await asyncio.sleep(1)
-                    else:
-                        break
-                if connection.is_in_transaction():
-                    raise Exception("Connection is busy")
+            await self.ensure_connection_available(connection)
             exists = await connection.fetchval(query, *query_values, timeout=self.timeout)
             return exists
         except asyncpg.PostgresError as e:
@@ -563,14 +507,7 @@ class Table:
             query_values = list(where.values()) if where else []
             connection = await self._get_connection()
             # if connection is busy wait 1 second and try again
-            if not isinstance(self.connection.connection, asyncpg.pool.Pool):
-                for i in range(5):
-                    if connection.is_in_transaction():
-                        await asyncio.sleep(1)
-                    else:
-                        break
-                if connection.is_in_transaction():
-                    raise Exception("Connection is busy")
+            await self.ensure_connection_available(connection)
             rows = await connection.fetch(query, *query_values, timeout=self.timeout)
     
             if self.cache:
@@ -618,14 +555,7 @@ class Table:
             
             connection = await self._get_connection()
             # if connection is busy wait 1 second and try again
-            if not isinstance(self.connection.connection, asyncpg.pool.Pool):
-                for i in range(5):
-                    if connection.is_in_transaction():
-                        await asyncio.sleep(1)
-                    else:
-                        break
-                if connection.is_in_transaction():
-                    raise Exception("Connection is busy")
+            await self.ensure_connection_available(connection)
             
             rows = await connection.fetch(query, *query_values, timeout=self.timeout)
             return rows
@@ -656,14 +586,7 @@ class Table:
         try:
             connection = await self._get_connection()
             # if connection is busy wait 1 second and try again
-            if not isinstance(self.connection.connection, asyncpg.pool.Pool):
-                for i in range(5):
-                    if connection.is_in_transaction():
-                        await asyncio.sleep(1)
-                    else:
-                        break
-                if connection.is_in_transaction():
-                    raise Exception("Connection is busy")
+            await self.ensure_connection_available(connection)
             result = await connection.fetch(query, *args, timeout=self.timeout)
             return result
         except asyncpg.PostgresError as e:
@@ -694,14 +617,7 @@ class Table:
             """
             connection = await self._get_connection()
             # if connection is busy wait 1 second and try again
-            if not isinstance(self.connection.connection, asyncpg.pool.Pool):
-                for i in range(5):
-                    if connection.is_in_transaction():
-                        await asyncio.sleep(1)
-                    else:
-                        break
-                if connection.is_in_transaction():
-                    raise Exception("Connection is busy")
+            await self.ensure_connection_available(connection)
             columns = await connection.fetch(query, timeout=self.timeout)
             return [{"name": column["column_name"], "type": column["data_type"]} for column in columns]
         except asyncpg.PostgresError as e:
@@ -768,14 +684,7 @@ class Table:
         try:
             connection = await self._get_connection()
             # if connection is busy wait 1 second and try again
-            if not isinstance(self.connection.connection, asyncpg.pool.Pool):
-                for i in range(5):
-                    if connection.is_in_transaction():
-                        await asyncio.sleep(1)
-                    else:
-                        break
-                if connection.is_in_transaction():
-                    raise Exception("Connection is busy")
+            await self.ensure_connection_available(connection)
             query = f"DROP TABLE IF EXISTS {self.name};"
             await connection.execute(query, timeout=self.timeout)
         except asyncpg.PostgresError as e:
@@ -798,14 +707,7 @@ class Table:
         try:
             connection = await self._get_connection()
             # if connection is busy wait 1 second and try again
-            if not isinstance(self.connection.connection, asyncpg.pool.Pool):
-                for i in range(5):
-                    if connection.is_in_transaction():
-                        await asyncio.sleep(1)
-                    else:
-                        break
-                if connection.is_in_transaction():
-                    raise Exception("Connection is busy")
+            await self.ensure_connection_available(connection)
             query = f"TRUNCATE TABLE {self.name};"
             await connection.execute(query, timeout=self.timeout)
         except asyncpg.PostgresError as e:

@@ -31,7 +31,11 @@ class DataType:
             raise ValueError(f"{self.type_name} cannot have a default value")
         if self.type_name in ["JSON", "JSONB"]:
             value = json.dumps(value)
-        self.constraints.append(f"DEFAULT '{value}'")
+        if value not in ['CURRENT_DATE', 'CURRENT_TIME', 'CURRENT_TIMESTAMP']:
+            value = f"'{value}'"
+        else:
+            value = f"{value}"
+        self.constraints.append(f"DEFAULT {value}")
         return self
     
     def check(self, condition: str):
