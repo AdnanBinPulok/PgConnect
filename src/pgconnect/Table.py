@@ -542,17 +542,19 @@ class Table:
             if not by:
                 raise ValueError("No columns provided for search")
             
-            where_clause = " OR ".join(f"{column} ILIKE $1" for column in by)
+            # Create the WHERE clause for the search columns
+            where_clause = " OR ".join(f"{column}::text ILIKE $1" for column in by)
             
             query_values = [f"%{keyword}%"]
             
             if where:
-                additional_conditions = " AND ".join(f"{key} = ${i+2}" for i, key in enumerate(where.keys()))
+                # Create additional conditions for the WHERE clause
+                additional_conditions = " AND ".join(f"{key}::text = ${i+2}" for i, key in enumerate(where.keys()))
                 where_clause = f"({where_clause}) AND {additional_conditions}"
-                query_values.extend(where.values())
+                query_values.extend(str(value) for value in where.values())
             
             query = f"SELECT * FROM {self.name} WHERE {where_clause} ORDER BY {order_by} {order} LIMIT {limit}"
-            
+            print(query)
             connection = await self._get_connection()
             # if connection is busy wait 1 second and try again
             await self.ensure_connection_available(connection)
