@@ -1,12 +1,12 @@
 import asyncpg
-import pgconnect
+from . import DataType
 
 
 class Column:
     def __init__(
             self,
             name: str,
-            type: pgconnect.DataType
+            type: DataType
     ) -> None:
         """
         Initializes the column with specified properties.

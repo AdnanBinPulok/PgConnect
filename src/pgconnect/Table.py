@@ -2,7 +2,7 @@ import asyncpg
 import traceback
 from .Column import Column
 from typing import Optional, List, Any, Dict
-from pgconnect import Connection
+from . import Connection
 from cachetools import TTLCache
 import asyncio
 
@@ -132,7 +132,7 @@ class Table:
             return None
         finally:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
-                await connection.close()
+                await connection.release_connection()
         
     async def insert(self, **kwargs):
         """
@@ -176,7 +176,7 @@ class Table:
             return None
         finally:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
-                await connection.close()
+                await connection.release_connection()
 
 
     async def update(self, where: Dict[str, Any], **kwargs):
@@ -222,7 +222,7 @@ class Table:
             return None
         finally:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
-                await connection.close()
+                await connection.release_connection()
 
                 
     async def delete(self, **where):
@@ -265,7 +265,7 @@ class Table:
             return None
         finally:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
-                await connection.close()
+                await connection.release_connection()
 
                 
     async def select(self, *columns, **where):
@@ -307,7 +307,7 @@ class Table:
             return None
         finally:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
-                await connection.close()
+                await connection.release_connection()
 
                 
     async def get(self, **where):
@@ -357,7 +357,7 @@ class Table:
             return None
         finally:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
-                await connection.close()
+                await connection.release_connection()
 
                 
     async def gets(self, **where):
@@ -397,7 +397,7 @@ class Table:
             return None
         finally:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
-                await connection.close()
+                await connection.release_connection()
 
                 
     async def get_all(self):
@@ -422,7 +422,7 @@ class Table:
             return None
         finally:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
-                await connection.close()
+                await connection.release_connection()
 
                 
     async def count(self, **where):
@@ -452,7 +452,7 @@ class Table:
             return None
         finally:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
-                await connection.close()
+                await connection.release_connection()
 
                 
     async def exists(self, **where):
@@ -482,7 +482,7 @@ class Table:
             return None
         finally:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
-                await connection.close()
+                await connection.release_connection()
 
                 
     
@@ -524,16 +524,18 @@ class Table:
             return None
         finally:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
-                await connection.close()
+                await connection.release_connection()
 
     
-    async def search(self, by: Optional[list], keyword: str, limit: int = 10, where: Dict[str, Any] = None, order_by: str = 'id', order: str = 'ASC'):
+    async def search(self, by: Optional[list], keyword: str, page: int = 1, limit: int = 10, 
+                    where: Dict[str, Any] = None, order_by: str = 'id', order: str = 'ASC'):
         """
-        Searches the table for a keyword in the specified columns.
-    
+        Searches the table for a keyword in the specified columns with pagination.
+
         :param by: The columns to search.
         :param keyword: The keyword to search for.
-        :param limit: The maximum number of rows to return.
+        :param page: The page number (starting from 1).
+        :param limit: The number of rows per page.
         :param where: Additional conditions for the search.
         :param order_by: The column to order the results by.
         :param order: The order direction (ASC or DESC).
@@ -541,6 +543,8 @@ class Table:
         try:
             if not by:
                 raise ValueError("No columns provided for search")
+            
+            offset = (page - 1) * limit
             
             # Create the WHERE clause for the search columns
             where_clause = " OR ".join(f"{column}::text ILIKE $1" for column in by)
@@ -553,15 +557,19 @@ class Table:
                 where_clause = f"({where_clause}) AND {additional_conditions}"
                 query_values.extend(str(value) for value in where.values())
             
-            query = f"SELECT * FROM {self.name} WHERE {where_clause} ORDER BY {order_by} {order} LIMIT {limit}"
-            print(query)
+            query = f"""
+                SELECT * FROM {self.name} 
+                WHERE {where_clause} 
+                ORDER BY {order_by} {order} 
+                LIMIT {limit} OFFSET {offset}
+            """
+            
             connection = await self._get_connection()
-            # if connection is busy wait 1 second and try again
             await self.ensure_connection_available(connection)
             
             rows = await connection.fetch(query, *query_values, timeout=self.timeout)
             return rows
-    
+
         except asyncpg.PostgresError as e:
             print(f"Failed to search table {self.name}: {e}")
             return None
@@ -573,7 +581,7 @@ class Table:
             return None
         finally:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
-                await connection.close()
+                await connection.release_connection()
 
                 
     async def query(self, query: str, *args):
@@ -599,7 +607,7 @@ class Table:
             return None
         finally:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
-                await connection.close()
+                await connection.release_connection()
 
                 
 
@@ -630,7 +638,7 @@ class Table:
             return None
         finally:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
-                await connection.close()
+                await connection.release_connection()
 
                 
     def __repr__(self) -> str:
@@ -697,7 +705,7 @@ class Table:
             return None
         finally:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
-                await connection.close()
+                await connection.release_connection()
 
                 
     async def truncate(self):
@@ -720,6 +728,6 @@ class Table:
             return None
         finally:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
-                await connection.close()
+                await connection.release_connection()
 
                 
