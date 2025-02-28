@@ -5,6 +5,7 @@ from typing import Optional, List, Any, Dict
 from . import Connection
 from cachetools import TTLCache
 import asyncio
+from .Filters import Between, Like, In
 
 class Table:
     def __init__(
@@ -267,31 +268,51 @@ class Table:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.release_connection()
 
-                
+    async def _build_where_clause(self, where: Dict[str, Any]) -> tuple[str, list]:
+        """
+        Build WHERE clause from filters dictionary.
+        Returns tuple of (where_clause, parameters)
+        """
+        if not where:
+            return "1=1", []
+
+        conditions = []
+        params = []
+        param_count = 1
+
+        for key, value in where.items():
+            if isinstance(value, (Between, Like, In)):
+                conditions.append(value.to_sql(key, params))
+            else:
+                conditions.append(f"{key} = ${param_count}")
+                params.append(value)
+                param_count += 1
+
+        return " AND ".join(conditions), params
+
     async def select(self, *columns, **where):
         """
-        Selects rows from the table.
+        Selects rows from the table with advanced filtering.
 
         :param columns: The columns to select.
-        :param where: A dictionary specifying the conditions for the rows to select.
-        :raises RuntimeError: If there is a database error.
-        :return: The selected rows.
+        :param where: A dictionary with column names as keys and values/filters as values.
+        Example:
+            table.select('name', 'age', age=Filters.Between(18, 30), name=Filters.Like('John'))
         """
         try:
-
             connection = await self._get_connection()
+            
+            # Check cache first if enabled
             cache_key = self._get_cache_key(**where)
             if self.cache and cache_key and cache_key in self.caches:
                 return [self.caches[cache_key]]
 
             columns_clause = ", ".join(columns) if columns else "*"
-            where_clause = " AND ".join(f"{key} = ${i+1}" for i, key in enumerate(where.keys())) if where else "1=1"
+            where_clause, params = await self._build_where_clause(where)
             query = f"SELECT {columns_clause} FROM {self.name} WHERE {where_clause}"
-            
-            query_values = list(where.values())
-            # if connection is busy wait 1 second and try again
+
             await self.ensure_connection_available(connection)
-            rows = await connection.fetch(query, *query_values, timeout=self.timeout)
+            rows = await connection.fetch(query, *params, timeout=self.timeout)
 
             if self.cache:
                 for row in rows:
@@ -309,37 +330,27 @@ class Table:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.release_connection()
 
-                
     async def get(self, **where):
         """
-        Gets a single row from the table.
+        Gets a single row from the table with advanced filtering.
 
-        :param where: A dictionary specifying the conditions for the row to get.
-        :raises RuntimeError: If there is a database error.
-        :return: The selected row.
+        :param where: A dictionary with column names as keys and values/filters as values.
+        Example:
+            table.get(id=1, age=Filters.Between(18, 30))
         """
         try:
-
-            # Validate and convert types
-            for column in self.columns:
-                if column.name in where:
-                    if isinstance(where[column.name], str) and column.type in ["INTEGER", "BIGINT"]:
-                        where[column.name] = int(where[column.name])
-                    elif isinstance(where[column.name], str) and column.type == "BOOLEAN":
-                        where[column.name] = where[column.name].lower() in ["true", "1", "yes"]
-
             connection = await self._get_connection()
 
+            # Check cache first if enabled
             cache_key = self._get_cache_key(**where)
             if self.cache and cache_key and cache_key in self.caches:
                 return self.caches[cache_key]
-            
-            where_clause = " AND ".join(f"{key} = ${i+1}" for i, key in enumerate(where.keys())) if where else "1=1"
-            query = f"SELECT * FROM {self.name} WHERE {where_clause}"
-            query_values = list(where.values())
-            # if connection is busy wait 1 second and try again
+
+            where_clause, params = await self._build_where_clause(where)
+            query = f"SELECT * FROM {self.name} WHERE {where_clause} LIMIT 1"
+
             await self.ensure_connection_available(connection)
-            row = await connection.fetchrow(query, *query_values, timeout=self.timeout)
+            row = await connection.fetchrow(query, *params, timeout=self.timeout)
 
             if self.cache and row:
                 cache_key = self._get_cache_key(**row)
@@ -359,29 +370,22 @@ class Table:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.release_connection()
 
-                
     async def gets(self, **where):
         """
-        Gets multiple rows from the table.
+        Gets multiple rows from the table with advanced filtering.
 
-        :param where: A dictionary specifying the conditions for the rows to get.
-        :raises RuntimeError: If there is a database error.
-        :return: The selected rows.
+        :param where: A dictionary with column names as keys and values/filters as values.
+        Example:
+            table.gets(status='active', age=Filters.Between(18, 30))
         """
         try:
             connection = await self._get_connection()
-            cache_key = self._get_cache_key(**where)
-            if self.cache and cache_key and cache_key in self.caches:
-                return [self.caches[cache_key]]
-            
-            where_clause = " AND ".join(f"{key} = ${i+1}" for i, key in enumerate(where.keys())) if where else "1=1"
+
+            where_clause, params = await self._build_where_clause(where)
             query = f"SELECT * FROM {self.name} WHERE {where_clause}"
 
-            query_values = list(where.values())
-
-            # if connection is busy wait 1 second and try again
             await self.ensure_connection_available(connection)
-            rows = await connection.fetch(query, *query_values, timeout=self.timeout)
+            rows = await connection.fetch(query, *params, timeout=self.timeout)
 
             if self.cache:
                 for row in rows:
@@ -399,7 +403,52 @@ class Table:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.release_connection()
 
-                
+    async def get_page(self, page: int = 1, limit: int = 10, where: Dict[str, Any] = None, 
+                    order_by: str = None, order: str = 'ASC'):
+        """
+        Gets a paginated set of rows with advanced filtering.
+
+        :param page: The page number to retrieve.
+        :param limit: The number of rows per page.
+        :param where: A dictionary with column names as keys and values/filters as values.
+        :param order_by: The column to order by.
+        :param order: The sort order ('ASC' or 'DESC').
+        Example:
+            table.get_page(1, 10, where={'status': 'active', 'age': Filters.Between(18, 30)})
+        """
+        try:
+            offset = (page - 1) * limit
+            where = where or {}
+            where_clause, params = await self._build_where_clause(where)
+            order_clause = f"ORDER BY {order_by} {order}" if order_by else ""
+            
+            query = f"""
+                SELECT * FROM {self.name} 
+                WHERE {where_clause} 
+                {order_clause} 
+                LIMIT {limit} OFFSET {offset}
+            """
+
+            connection = await self._get_connection()
+            await self.ensure_connection_available(connection)
+            rows = await connection.fetch(query, *params, timeout=self.timeout)
+
+            if self.cache:
+                for row in rows:
+                    cache_key = self._get_cache_key(**row)
+                    if cache_key:
+                        self.caches[cache_key] = row
+            return rows
+        except asyncpg.PostgresError as e:
+            print(f"Failed to get paginated rows from table {self.name}: {e}")
+            return None
+        except Exception as e:
+            print(traceback.format_exc())
+            return None
+        finally:
+            if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
+                await connection.release_connection()
+
     async def get_all(self):
         """
         Gets all rows from the table.
@@ -424,7 +473,6 @@ class Table:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.release_connection()
 
-                
     async def count(self, **where):
         """
         Counts the number of rows in the table.
@@ -454,7 +502,6 @@ class Table:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.release_connection()
 
-                
     async def exists(self, **where):
         """
         Checks if any rows exist in the table that match the conditions.
@@ -484,49 +531,6 @@ class Table:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.release_connection()
 
-                
-    
-    async def get_page(self, page: int = 1, limit: int = 10, where: Dict[str, Any] = None, order_by: str = None, order: str = 'ASC'):
-        """
-        Gets a paginated set of rows from the table.
-    
-        :param page: The page number to retrieve.
-        :param limit: The number of rows per page.
-        :param where: A dictionary specifying the conditions for the rows to get.
-        :param order_by: The column to order the results by.
-        :param order: The order direction ('ASC' or 'DESC').
-        :raises RuntimeError: If there is a database error.
-        :return: The selected rows.
-        """
-        try:
-            offset = (page - 1) * limit
-            where_clause = " AND ".join(f"{key} = ${i+1}" for i, key in enumerate(where.keys())) if where else "1=1"
-            order_clause = f"ORDER BY {order_by} {order}" if order_by else ""
-            query = f"SELECT * FROM {self.name} WHERE {where_clause} {order_clause} LIMIT {limit} OFFSET {offset}"
-    
-            query_values = list(where.values()) if where else []
-            connection = await self._get_connection()
-            # if connection is busy wait 1 second and try again
-            await self.ensure_connection_available(connection)
-            rows = await connection.fetch(query, *query_values, timeout=self.timeout)
-    
-            if self.cache:
-                for row in rows:
-                    cache_key = self._get_cache_key(**row)
-                    if cache_key:
-                        self.caches[cache_key] = row
-            return rows
-        except asyncpg.PostgresError as e:
-            print(f"Failed to get paginated rows from table {self.name}: {e}")
-            return None
-        except Exception as e:
-            print(traceback.format_exc())
-            return None
-        finally:
-            if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
-                await connection.release_connection()
-
-    
     async def search(self, by: Optional[list], keyword: str, page: int = 1, limit: int = 10, 
                     where: Dict[str, Any] = None, order_by: str = 'id', order: str = 'ASC'):
         """
@@ -583,7 +587,6 @@ class Table:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.release_connection()
 
-                
     async def query(self, query: str, *args):
         """
         Executes a custom query on the table.
@@ -609,9 +612,6 @@ class Table:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.release_connection()
 
-                
-
-        
     async def get_columns(self):
         """
         Retrieves the column names and types for the table.
@@ -640,13 +640,12 @@ class Table:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.release_connection()
 
-                
     def __repr__(self) -> str:
         return f"<Table {self.name}>"
 
     def __str__(self) -> str:
         return f"Table(name={self.name}, columns={self.columns})"
-    
+
     def __getitem__(self, key: str) -> Optional[Column]:
         """
         Gets a column by its name.
@@ -658,7 +657,7 @@ class Table:
             if column.name == key:
                 return column
         return None
-    
+
     def __setitem__(self, key: str, value: Column):
         """
         Sets a column by its name.
@@ -684,7 +683,7 @@ class Table:
                 del self.columns[i]
                 return
         raise KeyError(f"Column {key} not found")
-    
+
     async def drop(self):
         """
         Drops the table from the PostgreSQL database.
@@ -707,7 +706,6 @@ class Table:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.release_connection()
 
-                
     async def truncate(self):
         """
         Truncates the table to remove all rows.
@@ -730,4 +728,3 @@ class Table:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.release_connection()
 
-                
