@@ -5,6 +5,7 @@ setup.py
 src/pgconnect/Column.py
 src/pgconnect/Connection.py
 src/pgconnect/DataType.py
+src/pgconnect/Filters.py
 src/pgconnect/Table.py
 src/pgconnect/__init__.py
 src/pgconnect/examples.py
