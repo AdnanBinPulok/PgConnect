@@ -477,20 +477,17 @@ class Table:
         """
         Counts the number of rows in the table.
 
-        :param where: A dictionary specifying the conditions for the rows to count.
-        :raises RuntimeError: If there is a database error.
-        :return: The count of rows.
+        :param where: A dictionary with column names as keys and values/filters as values.
+        Example:
+            table.count(status='active', age=Filters.Between(18, 30))
         """
         try:
-            where_clause = " AND ".join(f"{key} = ${i+1}" for i, key in enumerate(where.keys())) if where else "1=1"
+            where_clause, params = await self._build_where_clause(where)
             query = f"SELECT COUNT(*) FROM {self.name} WHERE {where_clause}"
             
-            query_values = list(where.values())
-
             connection = await self._get_connection()
-            # if connection is busy wait 1 second and try again
             await self.ensure_connection_available(connection)
-            count = await connection.fetchval(query, *query_values, timeout=self.timeout)
+            count = await connection.fetchval(query, *params, timeout=self.timeout)
             return count
         except asyncpg.PostgresError as e:
             print(f"Failed to count rows in table {self.name}: {e}")
@@ -540,9 +537,15 @@ class Table:
         :param keyword: The keyword to search for.
         :param page: The page number (starting from 1).
         :param limit: The number of rows per page.
-        :param where: Additional conditions for the search.
+        :param where: Additional conditions using regular filters.
         :param order_by: The column to order the results by.
         :param order: The order direction (ASC or DESC).
+        Example:
+            table.search(
+                by=['name', 'email'],
+                keyword='john',
+                where={'status': 'active', 'age': Filters.Between(18, 30)}
+            )
         """
         try:
             if not by:
@@ -551,26 +554,24 @@ class Table:
             offset = (page - 1) * limit
             
             # Create the WHERE clause for the search columns
-            where_clause = " OR ".join(f"{column}::text ILIKE $1" for column in by)
-            
+            search_clause = " OR ".join(f"{column}::text ILIKE $1" for column in by)
             query_values = [f"%{keyword}%"]
             
+            # Handle additional where conditions
             if where:
-                # Create additional conditions for the WHERE clause
-                additional_conditions = " AND ".join(f"{key}::text = ${i+2}" for i, key in enumerate(where.keys()))
-                where_clause = f"({where_clause}) AND {additional_conditions}"
-                query_values.extend(str(value) for value in where.values())
+                where_clause, where_params = await self._build_where_clause(where)
+                search_clause = f"({search_clause}) AND ({where_clause})"
+                query_values.extend(where_params)
             
             query = f"""
                 SELECT * FROM {self.name} 
-                WHERE {where_clause} 
+                WHERE {search_clause} 
                 ORDER BY {order_by} {order} 
                 LIMIT {limit} OFFSET {offset}
             """
             
             connection = await self._get_connection()
             await self.ensure_connection_available(connection)
-            
             rows = await connection.fetch(query, *query_values, timeout=self.timeout)
             return rows
 
@@ -654,7 +655,7 @@ class Table:
         :return: The Column object if found, otherwise None.
         """
         for column in self.columns:
-            if column.name == key:
+            if (column.name == key):
                 return column
         return None
 
