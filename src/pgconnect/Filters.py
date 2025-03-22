@@ -31,10 +31,23 @@ class Like:
 class In:
     values: list
     
+    def __post_init__(self):
+        # Convert to list and remove duplicates
+        self.values = list(dict.fromkeys(self.values))
+        
+        # Convert string numbers to integers
+        if all(str(v).isdigit() for v in self.values):
+            self.values = [int(v) for v in self.values]
+    
     def to_sql(self, field_name: str, params: list) -> str:
         params.extend(self.values)
         placeholders = [f"${len(params)-len(self.values)+i+1}" for i in range(len(self.values))]
-        return f"{field_name} = ANY(ARRAY[{','.join(placeholders)}])"
+        
+        if all(isinstance(v, int) for v in self.values):
+            # Cast both the field and array elements to INTEGER for comparison
+            return f"CAST({field_name} AS INTEGER) IN (SELECT UNNEST(ARRAY[{','.join(placeholders)}]::INTEGER[]))"
+        else:
+            return f"{field_name} IN ({','.join(placeholders)})"
 
 class Filters:
     @staticmethod
