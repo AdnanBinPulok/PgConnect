@@ -587,6 +587,53 @@ class Table:
         finally:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.release_connection()
+    async def count_search(self, by: Optional[list], keyword: str, where: Dict[str, Any] = None) -> Optional[int]:
+        """
+        Counts the number of rows that match the search criteria.
+
+        :param by: The columns to search.
+        :param keyword: The keyword to search for.
+        :param where: Additional conditions using regular filters.
+        Example:
+            table.count_search(
+                by=['name', 'email'],
+                keyword='john',
+                where={'status': 'active', 'age': Filters.Between(18, 30)}
+            )
+        """
+        try:
+            if not by:
+                raise ValueError("No columns provided for search")
+            
+            # Create the WHERE clause for the search columns
+            search_clause = " OR ".join(f"{column}::text ILIKE $1" for column in by)
+            query_values = [f"%{keyword}%"]
+            
+            # Handle additional where conditions
+            if where:
+                where_clause, where_params = await self._build_where_clause(where)
+                search_clause = f"({search_clause}) AND ({where_clause})"
+                query_values.extend(where_params)
+
+            query = f"SELECT COUNT(*) FROM {self.name} WHERE {search_clause}"
+
+            connection = await self._get_connection()
+            await self.ensure_connection_available(connection)
+            count = await connection.fetchval(query, *query_values, timeout=self.timeout)
+            return count or 0
+
+        except asyncpg.PostgresError as e:
+            print(f"Failed to count search results in table {self.name}: {e}")
+            return None
+        except ValueError as e:
+            print(f"ValueError: {e}")
+            return None
+        except Exception as e:
+            print(traceback.format_exc())
+            return None
+        finally:
+            if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
+                await connection.release_connection()
 
     async def query(self, query: str, *args):
         """
