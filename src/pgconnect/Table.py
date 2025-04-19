@@ -553,14 +553,34 @@ class Table:
             
             offset = (page - 1) * limit
             
-            # Create the WHERE clause for the search columns
-            search_clause = " OR ".join(f"{column}::text ILIKE $1" for column in by)
+            # Start parameter index at 1
+            param_index = 1
+            
+            # Create the WHERE clause for the search columns with proper parameter index
+            search_clause = " OR ".join(f"{column}::text ILIKE ${param_index}" for column in by)
             query_values = [f"%{keyword}%"]
             
             # Handle additional where conditions
             if where:
                 where_clause, where_params = await self._build_where_clause(where)
-                search_clause = f"({search_clause}) AND ({where_clause})"
+                
+                # Replace the generic parameter placeholders with properly indexed ones
+                param_parts = []
+                for i, part in enumerate(where_clause.split('$')):
+                    if i == 0:  # First part has no $ prefix
+                        param_parts.append(part)
+                    elif part.strip():  # For parts that have content
+                        # Extract the parameter number and the rest of the string
+                        num_end = 0
+                        while num_end < len(part) and part[num_end].isdigit():
+                            num_end += 1
+                        if num_end > 0:
+                            new_index = param_index + int(part[:num_end])
+                            param_parts.append(f"{new_index}{part[num_end:]}")
+                
+                # Rebuild the where clause with adjusted parameter indices
+                adjusted_where_clause = '$'.join(param_parts)
+                search_clause = f"({search_clause}) AND ({adjusted_where_clause})"
                 query_values.extend(where_params)
             
             query = f"""
@@ -587,6 +607,7 @@ class Table:
         finally:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.release_connection()
+    
     async def count_search(self, by: Optional[list], keyword: str, where: Dict[str, Any] = None) -> Optional[int]:
         """
         Counts the number of rows that match the search criteria.
@@ -605,14 +626,34 @@ class Table:
             if not by:
                 raise ValueError("No columns provided for search")
             
-            # Create the WHERE clause for the search columns
-            search_clause = " OR ".join(f"{column}::text ILIKE $1" for column in by)
+            # Start parameter index at 1
+            param_index = 1
+            
+            # Create the WHERE clause for the search columns with proper parameter index
+            search_clause = " OR ".join(f"{column}::text ILIKE ${param_index}" for column in by)
             query_values = [f"%{keyword}%"]
             
             # Handle additional where conditions
             if where:
                 where_clause, where_params = await self._build_where_clause(where)
-                search_clause = f"({search_clause}) AND ({where_clause})"
+                
+                # Replace the generic parameter placeholders with properly indexed ones
+                param_parts = []
+                for i, part in enumerate(where_clause.split('$')):
+                    if i == 0:  # First part has no $ prefix
+                        param_parts.append(part)
+                    elif part.strip():  # For parts that have content
+                        # Extract the parameter number and the rest of the string
+                        num_end = 0
+                        while num_end < len(part) and part[num_end].isdigit():
+                            num_end += 1
+                        if num_end > 0:
+                            new_index = param_index + int(part[:num_end])
+                            param_parts.append(f"{new_index}{part[num_end:]}")
+                
+                # Rebuild the where clause with adjusted parameter indices
+                adjusted_where_clause = '$'.join(param_parts)
+                search_clause = f"({search_clause}) AND ({adjusted_where_clause})"
                 query_values.extend(where_params)
 
             query = f"SELECT COUNT(*) FROM {self.name} WHERE {search_clause}"
