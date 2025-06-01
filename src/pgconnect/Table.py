@@ -278,15 +278,13 @@ class Table:
 
         conditions = []
         params = []
-        param_count = 1
 
         for key, value in where.items():
             if isinstance(value, (Between, Like, In)):
                 conditions.append(value.to_sql(key, params))
             else:
-                conditions.append(f"{key} = ${param_count}")
                 params.append(value)
-                param_count += 1
+                conditions.append(f"{key} = ${len(params)}")
 
         return " AND ".join(conditions), params
 
@@ -730,7 +728,7 @@ class Table:
                 await connection.release_connection()
 
     def __repr__(self) -> str:
-        return f"<Table {self.name}>"
+        return f"<Table {self.name}"
 
     def __str__(self) -> str:
         return f"Table(name={self.name}, columns={self.columns})"
