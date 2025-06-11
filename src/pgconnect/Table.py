@@ -16,7 +16,8 @@ class Table:
             cache: bool = False,
             cache_key: Optional[str] = None,
             cache_ttl: Optional[int] = None,  # Change to Optional[int]
-            cache_maxsize: int = 1000
+            cache_maxsize: int = 1000,
+            indexes: Optional[List[Dict[str, Any]]] = None
     ) -> None:
         """
         Initializes the Table object.
@@ -42,6 +43,8 @@ class Table:
         
         self.caches = TTLCache(maxsize=cache_maxsize, ttl=self.cache_ttl) if cache else None
         self.timeout = 5  # Set the timeout to 5 seconds
+        self.indexes = indexes if indexes is not None else []
+
     def clear_cache(self):
         """
         Clears the cache for the table.
@@ -75,6 +78,102 @@ class Table:
                     break
             if connection.is_in_transaction():
                 raise Exception("Connection is still busy after multiple retries")
+
+    async def check_if_index_schema_correct(self):
+        """
+        Checks if the indexs schema is correct by comparing it with existing indexes.
+        Returns True if the index is correct, False otherwise.
+        """
+        try:
+            if not self.indexes:
+                return True
+            connection = await self._get_connection()
+            # if connection is busy wait 1 second and try again
+            for index in self.indexes:
+                # make sure nothing more than in that index is defined
+                for key in index:
+                    if key not in ["name", "columns", "unique"]:
+                        print(f"Index {index['name']} has invalid key {key}. Skipping index schema check.\nExpected keys are: ['name', 'columns', 'unique']")
+                        return False
+            return True
+        except Exception as e:
+            print(f"Failed to check index schema for table {self.name}: {e}")
+            return False
+
+    async def delete_existing_non_defined_indexes_and_create_indexes(self):
+        """
+        Deletes existing indexes that are not defined in the current table schema.
+        This is useful to clean up indexes that may have been created in previous versions of the table.
+        """
+        try:
+            if not await self.check_if_index_schema_correct():
+                self.indexes = []
+                print(f"Index schema for table {self.name} is not correct. Skipping index deletion and creation.")
+
+            connection = await self._get_connection()
+            # if connection is busy wait 1 second and try again
+            await self.ensure_connection_available(connection)
+            existing_indexes_query = f"""
+            SELECT indexname, indexdef
+            FROM pg_indexes
+            WHERE tablename = '{self.name}';
+            """
+            existing_indexes = await connection.fetch(existing_indexes_query, timeout=self.timeout)
+            # drop indexes that are not defined in the table
+            for index in existing_indexes:
+                index_name = index['indexname']
+                if index_name == f"{self.name}_pkey":
+                    continue
+                if self.indexes:
+                    if not any(index_name == idx.get("name", None) for idx in self.indexes):
+                        drop_index_query = f"DROP INDEX IF EXISTS {index_name};"
+                        await connection.execute(drop_index_query, timeout=self.timeout)
+                else:
+                    # If no indexes are defined, drop all existing indexes except the primary key
+                    drop_index_query = f"DROP INDEX IF EXISTS {index_name};"
+                    await connection.execute(drop_index_query, timeout=self.timeout)
+
+            # Now create indexes defined in the schema
+            if self.indexes:
+                await self.create_indexes(existing_indexes)
+
+        except asyncpg.PostgresError as e:
+            print(f"Failed to delete existing non-defined indexes for table {self.name}: {e}")
+            return None
+        except Exception as e:
+            print(traceback.format_exc())
+            return None
+        finally:
+            if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
+                await connection.release_connection()
+
+    async def create_indexes(self, already_existing_indexes: List):
+        """
+        Creates indexes for the table based on the defined indexes in the schema.
+        If an index already exists, it will skip creating that index.
+        """
+        try:
+            connection = await self._get_connection()
+            # if connection is busy wait 1 second and try again
+            await self.ensure_connection_available(connection)
+            for index in self.indexes:
+                index_name = index.get("name", f"idx_{self.name}_{'_'.join(index.get('columns', []))}")
+                if any(index_name == idx.get("name", None) for idx in already_existing_indexes):
+                    print(f"Index {index_name} already exists, skipping creation.")
+                    continue
+                columns = ", ".join(index['columns'])
+                unique = "UNIQUE" if index.get("unique", False) else ""
+                create_index_query = f"CREATE {unique} INDEX IF NOT EXISTS {index_name} ON {self.name} ({columns});"
+                await connection.execute(create_index_query, timeout=self.timeout)
+        except asyncpg.PostgresError as e:
+            print(f"Failed to create indexes for table {self.name}: {e}")
+            return None
+        except Exception as e:
+            print(traceback.format_exc())
+            return None
+        finally:
+            if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
+                await connection.release_connection()
 
     async def create(self):
         """
@@ -116,6 +215,9 @@ class Table:
                 
                 for query in alter_table_queries:
                     await connection.execute(query, timeout=self.timeout)
+
+                # After altering the table, create indexes if defined
+                await self.delete_existing_non_defined_indexes_and_create_indexes()
                 return
 
             query = f"CREATE TABLE IF NOT EXISTS {self.name} (\n"
@@ -124,7 +226,18 @@ class Table:
                 column: Column
                 column_definitions.append(f"{column.name} {column.type}")
             query += ",\n".join(column_definitions) + "\n);"
+
             await connection.execute(query, timeout=self.timeout)
+
+            # create table is done, now create indexes if defined
+
+            
+
+            # if the table has indexed not defined here delete them
+            # get all indexes for the table
+            await self.delete_existing_non_defined_indexes_and_create_indexes()
+
+            
         except asyncpg.PostgresError as e:
             print(f"Failed to create table {self.name}: {e}")
             return None
