@@ -1,11 +1,13 @@
+import time
 import asyncpg
 import traceback
 from .Column import Column
 from typing import Optional, List, Any, Dict
-from . import Connection
+from . import Connection, RedisConnection
 from cachetools import TTLCache
 import asyncio
 from .Filters import Between, Like, In
+
 
 class Table:
     def __init__(
@@ -14,6 +16,8 @@ class Table:
             connection: Connection,
             columns: List[Column],
             cache: bool = False,
+            redis_cache: bool = False,
+            redis_connection: Optional[RedisConnection] = None,
             cache_key: Optional[str] = None,
             cache_ttl: Optional[int] = None,  # Change to Optional[int]
             cache_maxsize: int = 1000,
@@ -35,13 +39,25 @@ class Table:
         self.connection: Connection = connection
         self.columns = columns
         self.cache = cache
+        self.redis_cache = redis_cache
+        self.redis_connection: Optional[RedisConnection] = redis_connection
         self.cache_key = cache_key
         self.cache_ttl = cache_ttl if cache_ttl is not None else 0  # Ensure cache_ttl is a valid number
         self.cache_maxsize = cache_maxsize
         self._conn = None  # Initialize the connection attribute
+
         if cache and not cache_key:
             raise ValueError("cache_key must be provided if cache is enabled")
         
+        if redis_cache and not redis_connection:
+            raise ValueError("redis_connection must be provided if redis_cache is enabled")
+
+        if redis_cache and not cache_key:
+            raise ValueError("cache_key must be provided if redis_cache is enabled")
+        
+        if cache and redis_cache:
+            raise ValueError("cache (memcache) and redis_cache cannot be enabled at the same time")
+
         self.caches = TTLCache(maxsize=cache_maxsize, ttl=self.cache_ttl) if cache else None
         self.timeout = fetch_timeout  # Set the timeout to the provided fetch_timeout
         self.indexes = indexes if indexes is not None else []
@@ -53,6 +69,103 @@ class Table:
         if not self.cache:
             raise ValueError("Cache is not enabled")
         self.caches.clear()
+
+    def cacheEnabled(self) -> bool:
+        """Checks if caching is enabled."""
+        return self.cache or (self.redis_cache and self.redis_connection)
+    
+    def redisCacheEnabled(self) -> bool:
+        """Checks if Redis caching is enabled."""
+        return self.redis_cache and self.redis_connection is not None
+
+    async def setCache(self, key: str, value: Any):
+        """Sets a value in the cache."""
+        if not self.cacheEnabled():
+            return None
+        if self.cache:
+            self.caches[key] = value
+            return True
+        elif self.redis_cache and self.redis_connection:
+            try:
+                await self.redis_connection.set(table_name=self.name, key=key, value=value, ttl=self.cache_ttl)
+                return True
+            except Exception as e:
+                print(f"Error setting cache in Redis: {e}")
+                return None
+        else:
+            return None
+    
+    async def getCache(self, key: str) -> Any:
+        """Gets a value from the cache."""
+        if not self.cacheEnabled():
+            return None
+        if self.cache:
+            return self.caches.get(key)
+        elif self.redis_cache and self.redis_connection:
+            try:
+                return await self.redis_connection.get(table_name=self.name, key=key)
+            except Exception as e:
+                print(f"Error getting cache from Redis: {e}")
+                return None
+        else:
+            return None
+    
+    async def cacheExists(self, key: str) -> bool:
+        """Checks if a value exists in the cache."""
+        if not self.cacheEnabled():
+            return False
+        if self.cache:
+            return key in self.caches
+        elif self.redis_cache and self.redis_connection:
+            try:
+                return await self.redis_connection.exists(table_name=self.name, key=key)
+            except Exception as e:
+                print(f"Error checking cache existence in Redis: {e}")
+                return False
+        else:
+            return False
+
+    async def clear_redis_cache(self):
+        """
+        Clears the Redis cache for the table.
+        """
+        if not self.redisCacheEnabled():
+            return
+        await self.redis_connection.clear_cache(self.name)
+
+    async def pingDatabase(self) -> float:
+        """
+        Pings the database to check if the connection is alive.
+        """
+        try:
+            start_time = time.time_ns()
+            connection = await self._get_connection()
+            # if connection is busy wait 1 second and try again
+            await self.ensure_connection_available(connection)
+            await connection.execute("SELECT 1")
+            return round((time.time_ns() - start_time) / 1_000_000, 4)  # Return ping time in milliseconds
+        except Exception as e:
+            print(f"Error pinging database: {e}")
+            return -1
+        finally:
+            if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
+                await connection.release_connection()
+
+    async def pingRedis(self) -> float:
+        """
+        Pings the Redis cache to check if the connection is alive.
+        """
+        try:
+            start_time = time.time_ns()
+            if not self.redisCacheEnabled():
+                return -1
+            result = await self.redis_connection.ping()
+            if result > 0:
+                return result
+            return round((time.time_ns() - start_time) / 1_000_000, 4)  # Return ping time in milliseconds
+        except Exception as e:
+            print(f"Error pinging Redis: {e}")
+            return -1
 
     async def _get_connection(self):
         return await self.connection.get_connection()
@@ -88,7 +201,6 @@ class Table:
         try:
             if not self.indexes:
                 return True
-            connection = await self._get_connection()
             # if connection is busy wait 1 second and try again
             for index in self.indexes:
                 # make sure nothing more than in that index is defined
@@ -277,10 +389,10 @@ class Table:
 
             row = await connection.fetchrow(query, *query_values, timeout=self.timeout)
 
-            if self.cache:
+            if self.cacheEnabled():
                 cache_key = self._get_cache_key(**row)
                 if cache_key:
-                    self.caches[cache_key] = row
+                    await self.setCache(cache_key, row)
 
             return row
         except asyncpg.PostgresError as e:
@@ -336,11 +448,11 @@ class Table:
 
             rows = await connection.fetch(query, *query_values, timeout=self.timeout)
 
-            if self.cache:
+            if self.cacheEnabled():
                 for row in rows:
                     cache_key = self._get_cache_key(**row)
                     if cache_key:
-                        self.caches[cache_key] = row
+                        await self.setCache(cache_key, row)
 
             return rows
         except asyncpg.PostgresError as e:
@@ -382,11 +494,11 @@ class Table:
             await self.ensure_connection_available(connection)
             rows = await connection.fetch(query, *query_values, timeout=self.timeout)
 
-            if self.cache:
+            if self.cacheEnabled():
                 for row in rows:
                     cache_key = self._get_cache_key(**row)
                     if cache_key:
-                        self.caches[cache_key] = row
+                        await self.setCache(cache_key, row)
 
             return rows
         except asyncpg.PostgresError as e:
@@ -425,11 +537,11 @@ class Table:
             await self.ensure_connection_available(connection)
             rows = await connection.fetch(query, *query_values, timeout=self.timeout)
 
-            if self.cache:
+            if self.cacheEnabled():
                 for row in rows:
                     cache_key = self._get_cache_key(**row)
-                    if cache_key and cache_key in self.caches:
-                        del self.caches[cache_key]
+                    if cache_key and await self.cacheExists(cache_key):
+                        await self.deleteCache(cache_key)
 
             return rows
         except asyncpg.PostgresError as e:
@@ -508,8 +620,8 @@ class Table:
 
             # Check cache first if enabled
             cache_key = self._get_cache_key(**where)
-            if self.cache and cache_key and cache_key in self.caches:
-                return self.caches[cache_key]
+            if self.cacheEnabled() and cache_key and await self.cacheExists(cache_key):
+                return await self.getCache(cache_key)
 
             where_clause, params = await self._build_where_clause(where)
             query = f"SELECT * FROM {self.name} WHERE {where_clause} LIMIT 1"
@@ -517,10 +629,10 @@ class Table:
             await self.ensure_connection_available(connection)
             row = await connection.fetchrow(query, *params, timeout=self.timeout)
 
-            if self.cache and row:
+            if self.cacheEnabled() and row:
                 cache_key = self._get_cache_key(**row)
                 if cache_key:
-                    self.caches[cache_key] = row
+                    await self.setCache(cache_key, row)
             return row
         except asyncpg.PostgresError as e:
             print(f"Failed to get row from table {self.name}: {e}")
@@ -552,11 +664,11 @@ class Table:
             await self.ensure_connection_available(connection)
             rows = await connection.fetch(query, *params, timeout=self.timeout)
 
-            if self.cache:
+            if self.cacheEnabled():
                 for row in rows:
                     cache_key = self._get_cache_key(**row)
                     if cache_key:
-                        self.caches[cache_key] = row
+                        await self.setCache(cache_key, row)
             return rows
         except asyncpg.PostgresError as e:
             print(f"Failed to get rows from table {self.name}: {e}")
@@ -598,11 +710,11 @@ class Table:
             await self.ensure_connection_available(connection)
             rows = await connection.fetch(query, *params, timeout=self.timeout)
 
-            if self.cache:
+            if self.cacheEnabled():
                 for row in rows:
                     cache_key = self._get_cache_key(**row)
                     if cache_key:
-                        self.caches[cache_key] = row
+                        await self.setCache(cache_key, row)
             return rows
         except asyncpg.PostgresError as e:
             print(f"Failed to get paginated rows from table {self.name}: {e}")

@@ -1,7 +1,10 @@
+from multiprocessing import pool
 import asyncpg
 import time
 import asyncio
+import json
 from typing import Optional, Any
+
 
 class Connection:
     connection: Optional[asyncpg.Connection] = None
@@ -167,13 +170,114 @@ class Connection:
         """Close the connection to the database"""
         try:
             if self.connection:
+                if isinstance(self.connection, asyncpg.pool.Pool):
                     await self.connection.close()
-            else:
-                await self.connection.close()
+                else:
+                    await self.connection.close()
             self.connection = None
             self._is_connected = False
             return True
         except Exception as e:
             print(f"Error closing connection: {str(e)}")
-            print(f"Error closing connection: {str(e)}")
+            return False
+
+from redis.asyncio import Redis, ConnectionPool
+
+class RedisConnection:
+    def __init__(
+            self,
+            host: str,
+            port: int,
+            password: str,
+            decode_responses: bool = True,
+    ):
+        """
+        Initialize the Redis connection for caching.
+
+        Args:
+            host (str): The Redis server hostname.
+            port (int): The Redis server port.
+            password (str): The Redis server password.
+            decode_responses (bool): Whether to decode responses as strings.
+
+        Returns:
+            None
+        """
+        pool:ConnectionPool = ConnectionPool(
+            max_connections=100, 
+            host=host, 
+            port=port, 
+            password=password, 
+            decode_responses=decode_responses
+        )
+        self.redis: Redis = Redis(connection_pool=pool)
+
+    def _serialize_value(self, value: Any) -> str:
+        """Serialize a value for Redis storage"""
+        if isinstance(value, (str, int, float, bool, type(None))):
+            return json.dumps(value)
+        # Handle asyncpg.Record objects
+        elif hasattr(value, '_mapping'):
+            return json.dumps(dict(value))
+        elif isinstance(value, (list, tuple)):
+            return json.dumps([dict(item) if hasattr(item, '_mapping') else item for item in value])
+        else:
+            return json.dumps(str(value))
+    
+    def _deserialize_value(self, value: str) -> Any:
+        """Deserialize a value from Redis storage"""
+        if value is None:
+            return None
+        try:
+            return json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            return value
+
+    async def set(self, table_name: str, key: str, value: Any, ttl: int = None):
+        # ttl in seconds
+        serialized_value = self._serialize_value(value)
+        await self.redis.set(f"{table_name}:{key}", serialized_value, ex=ttl)
+
+    async def update(self, table_name: str, key: str, value: Any, ttl: int = None):
+        serialized_value = self._serialize_value(value)
+        await self.redis.set(f"{table_name}:{key}", serialized_value, ex=ttl)
+
+    async def get(self, table_name: str, key: str):
+        value = await self.redis.get(f"{table_name}:{key}")
+        return self._deserialize_value(value)
+
+    async def delete(self, table_name: str, key: str):
+        await self.redis.delete(f"{table_name}:{key}")
+
+    async def exists(self, table_name: str, key: str) -> bool:
+        return True if (await self.redis.exists(f"{table_name}:{key}")) > 0 else False
+    
+    async def ping(self) -> float:
+        start_time = time.time_ns()
+        result = await self.redis.ping()
+        end_time = time.time_ns()
+        if result:
+            return round((end_time - start_time) / 1_000_000, 4)  # Return ping time in milliseconds
+        return -1
+
+    async def clear_cache(self, table_name: str):
+        """
+        Clears the cache for the specified table.
+        """
+        # Use scan to find all keys with the table pattern and delete them
+        keys = []
+        async for key in self.redis.scan_iter(match=f"{table_name}:*"):
+            keys.append(key)
+        
+        if keys:
+            return await self.redis.delete(*keys)
+        return 0
+    
+    async def close(self):
+        """Close the Redis connection"""
+        try:
+            await self.redis.close()
+            return True
+        except Exception as e:
+            print(f"Error closing Redis connection: {str(e)}")
             return False
