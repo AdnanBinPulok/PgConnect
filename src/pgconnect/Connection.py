@@ -3,7 +3,10 @@ import asyncpg
 import time
 import asyncio
 import json
-from typing import Optional, Any
+import datetime
+from typing import Optional, Any, overload, Iterator, TypeVar
+
+_T = TypeVar('_T')
 
 
 class Connection:
@@ -183,12 +186,101 @@ class Connection:
 
 from redis.asyncio import Redis, ConnectionPool
 
+class CachedRecord:
+    """A CachedRecord object that mimics asyncpg.Record behavior exactly"""
+    def __init__(self, data: dict):
+        self._data = data
+        self._mapping = data
+    
+    @overload
+    def get(self, key: str) -> Any | None: ...
+    @overload
+    def get(self, key: str, default: _T) -> Any | _T: ...
+    def get(self, key: str, default=None):
+        """Get value by key with optional default"""
+        return self._data.get(key, default)
+    
+    def items(self) -> Iterator[tuple[str, Any]]:
+        """Return an iterator over the (key, value) pairs"""
+        return iter(self._data.items())
+    
+    def keys(self) -> Iterator[str]:
+        """Return an iterator over the keys"""
+        return iter(self._data.keys())
+    
+    def values(self) -> Iterator[Any]:
+        """Return an iterator over the values"""
+        return iter(self._data.values())
+    
+    @overload
+    def __getitem__(self, index: str) -> Any: ...
+    @overload  
+    def __getitem__(self, index: int) -> Any: ...
+    @overload
+    def __getitem__(self, index: slice) -> tuple[Any, ...]: ...
+    def __getitem__(self, index):
+        """Get item by string key, integer index, or slice"""
+        if isinstance(index, str):
+            return self._data[index]
+        elif isinstance(index, int):
+            # Convert to list for integer indexing
+            values = list(self._data.values())
+            return values[index]
+        elif isinstance(index, slice):
+            # Convert to tuple for slice indexing
+            values = list(self._data.values())
+            return tuple(values[index])
+        else:
+            raise TypeError(f"Invalid index type: {type(index)}")
+    
+    def __iter__(self) -> Iterator[Any]:
+        """Iterate over values (like asyncpg.Record)"""
+        return iter(self._data.values())
+    
+    def __contains__(self, x: object) -> bool:
+        """Check if key exists in record"""
+        return x in self._data
+    
+    def __len__(self) -> int:
+        """Return number of fields in record"""
+        return len(self._data)
+    
+    def __getattr__(self, name):
+        """Allow attribute-style access to fields"""
+        if name.startswith('_'):
+            # Avoid recursion for private attributes
+            raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
+        if name in self._data:
+            return self._data[name]
+        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
+    
+
+    def __repr__(self):
+        """String representation similar to asyncpg.Record"""
+        items = ' '.join(f'{k}={v!r}' for k, v in self._data.items())
+        return f'<Record {items}>'
+    
+    def __eq__(self, other):
+        """Equality comparison"""
+        if hasattr(other, '_data'):
+            return self._data == other._data
+        elif hasattr(other, '_mapping'):
+            return self._data == dict(other)
+        elif isinstance(other, dict):
+            return self._data == other
+        return False
+    
+    def __hash__(self):
+        """Make Record hashable"""
+        return hash(tuple(sorted(self._data.items())))
+
 class RedisConnection:
     def __init__(
             self,
             host: str,
             port: int,
             password: str,
+            db: str | int = 0,
             decode_responses: bool = True,
     ):
         """
@@ -207,31 +299,126 @@ class RedisConnection:
             max_connections=100, 
             host=host, 
             port=port, 
-            password=password, 
+            password=password,
+            db=db,
             decode_responses=decode_responses
         )
         self.redis: Redis = Redis(connection_pool=pool)
 
     def _serialize_value(self, value: Any) -> str:
         """Serialize a value for Redis storage"""
-        if isinstance(value, (str, int, float, bool, type(None))):
-            return json.dumps(value)
+        if value is None:
+            return json.dumps({"type": "none", "value": None})
+        elif isinstance(value, (str, int, float, bool)):
+            return json.dumps({"type": "primitive", "value": value})
+        elif isinstance(value, datetime.datetime):
+            return json.dumps({"type": "datetime", "value": value.isoformat()})
         # Handle asyncpg.Record objects
-        elif hasattr(value, '_mapping'):
-            return json.dumps(dict(value))
+        elif hasattr(value, '_mapping') or str(type(value)) == "<class 'asyncpg.Record'>":
+            # Convert Record to dict, handling datetime objects
+            record_dict = {}
+            for key, val in dict(value).items():
+                if isinstance(val, datetime.datetime):
+                    record_dict[key] = val.isoformat()
+                else:
+                    record_dict[key] = val
+            return json.dumps({"type": "record", "value": record_dict})
         elif isinstance(value, (list, tuple)):
-            return json.dumps([dict(item) if hasattr(item, '_mapping') else item for item in value])
+            serialized_items = []
+            for item in value:
+                if hasattr(item, '_mapping') or str(type(item)) == "<class 'asyncpg.Record'>":
+                    # Convert Record to dict, handling datetime objects
+                    record_dict = {}
+                    for key, val in dict(item).items():
+                        if isinstance(val, datetime.datetime):
+                            record_dict[key] = val.isoformat()
+                        else:
+                            record_dict[key] = val
+                    serialized_items.append({"type": "record", "value": record_dict})
+                else:
+                    serialized_items.append({"type": "primitive", "value": item})
+            return json.dumps({"type": "list", "value": serialized_items})
         else:
-            return json.dumps(str(value))
+            return json.dumps({"type": "string", "value": str(value)})
     
     def _deserialize_value(self, value: str) -> Any:
         """Deserialize a value from Redis storage"""
         if value is None:
             return None
+        
         try:
-            return json.loads(value)
-        except (json.JSONDecodeError, TypeError):
+            # Handle cases where value might already be a Python object
+            if not isinstance(value, str):
+                return value
+                
+            data = json.loads(value)
+            
+            # Handle old format or plain values (backward compatibility)
+            if not isinstance(data, dict) or "type" not in data:
+                return data
+            
+            data_type = data.get("type")
+            data_value = data.get("value")
+            
+            if data_type == "none":
+                return None
+            elif data_type == "primitive":
+                return data_value
+            elif data_type == "datetime":
+                return datetime.datetime.fromisoformat(data_value)
+            elif data_type == "record":
+                # Convert datetime strings back to datetime objects
+                result_dict = {}
+                for key, val in data_value.items():
+                    if isinstance(val, str) and self._is_datetime_string(val):
+                        try:
+                            result_dict[key] = datetime.datetime.fromisoformat(val)
+                        except:
+                            result_dict[key] = val
+                    else:
+                        result_dict[key] = val
+                
+                # Always return RecordLike object for records
+                return CachedRecord(result_dict)
+            elif data_type == "list":
+                result = []
+                for item in data_value:
+                    if isinstance(item, dict) and item.get("type") == "record":
+                        # Convert datetime strings back to datetime objects
+                        record_dict = {}
+                        for key, val in item["value"].items():
+                            if isinstance(val, str) and self._is_datetime_string(val):
+                                try:
+                                    record_dict[key] = datetime.datetime.fromisoformat(val)
+                                except:
+                                    record_dict[key] = val
+                            else:
+                                record_dict[key] = val
+                        
+                        # Always return RecordLike object for records
+                        result.append(CachedRecord(record_dict))
+                    elif isinstance(item, dict) and item.get("type") == "primitive":
+                        result.append(item["value"])
+                    else:
+                        result.append(item)
+                return result
+            elif data_type == "string":
+                return data_value
+            else:
+                return data_value
+                
+        except (json.JSONDecodeError, TypeError, KeyError, AttributeError) as e:
+            # If deserialization fails, try to return the original value
+            print(f"Warning: Failed to deserialize value: {e}")
             return value
+    
+    def _is_datetime_string(self, value: str) -> bool:
+        """Check if a string looks like a datetime ISO format"""
+        try:
+            datetime.datetime.fromisoformat(value)
+            return True
+        except:
+            return False
 
     async def set(self, table_name: str, key: str, value: Any, ttl: int = None):
         # ttl in seconds
@@ -245,6 +432,10 @@ class RedisConnection:
     async def get(self, table_name: str, key: str):
         value = await self.redis.get(f"{table_name}:{key}")
         return self._deserialize_value(value)
+
+    async def get_as_record(self, table_name: str, key: str):
+        """Get cached value (alias for get method - now always returns RecordLike for records)"""
+        return await self.get(table_name, key)
 
     async def delete(self, table_name: str, key: str):
         await self.redis.delete(f"{table_name}:{key}")

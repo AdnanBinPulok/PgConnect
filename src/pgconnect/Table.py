@@ -110,6 +110,10 @@ class Table:
         else:
             return None
     
+    async def getCacheAsRecord(self, key: str) -> Any:
+        """Gets a cached record (alias for getCache - now always returns RecordLike for records)."""
+        return await self.getCache(key)
+    
     async def cacheExists(self, key: str) -> bool:
         """Checks if a value exists in the cache."""
         if not self.cacheEnabled():

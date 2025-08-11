@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pgconnect"
-version = "0.4.0"
+version = "0.4.6"
 authors = [
   { name="Adnan Bin Pulok", email="adnanbinpulok@gmail.com" },
 ]
@@ -18,7 +18,8 @@ classifiers = [
 ]
 dependencies = [
     "asyncpg",
-    "cachetools"
+    "cachetools",
+    "redis"
 ]
 
 [project.urls]

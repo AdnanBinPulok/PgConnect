@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='pgconnect',
-    version='0.4.0',
+    version='0.4.6',
     author='AdnanBinPulok',
     author_email='adnanbinpulok@gmail.com',
     description='A PostgreSQL connection and ORM library',
@@ -19,6 +19,7 @@ setup(
     python_requires='>=3.6',
     install_requires=[
         'asyncpg',
-        'cachetools'
+        'cachetools',
+        'redis'
     ],
 )

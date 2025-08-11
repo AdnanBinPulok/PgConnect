@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: pgconnect
-Version: 0.4.0
+Version: 0.4.6
 Summary: A PostgreSQL connection and ORM library
 Home-page: https://github.com/AdnanBinPulok/PgConnect
 Author: AdnanBinPulok
@@ -16,6 +16,7 @@ Description-Content-Type: text/markdown
 License-File: LICENSE
 Requires-Dist: asyncpg
 Requires-Dist: cachetools
+Requires-Dist: redis
 Dynamic: author
 Dynamic: home-page
 Dynamic: license-file
@@ -30,7 +31,10 @@ PgConnect is a PostgreSQL connection and ORM library for Python. It provides an 
 - Easy connection to PostgreSQL databases
 - ORM-like interface for defining and interacting with database tables
 - Support for various PostgreSQL data types
-- Caching mechanism for improved performance
+- **Advanced caching mechanism** with Redis support for improved performance
+- **RecordLike objects** that behave exactly like `asyncpg.Record` for cached data
+- Connection pooling for high-performance applications
+- Comprehensive filtering and search capabilities
 
 ## Installation
 
@@ -40,23 +44,101 @@ You can install PgConnect using pip:
 pip install pgconnect
 ```
 
+## Requirements
+
+- Python 3.6+
+- asyncpg
+- cachetools
+- redis (for Redis caching support)
+
 ## Caching
 
-Caching in `PgConnect` is designed to improve performance by reducing the number of database queries for frequently accessed data. When caching is enabled, the library stores query results in memory (or another caching backend) to serve future requests faster.
+PgConnect supports **two types of caching** to improve performance by reducing database queries:
+
+1. **In-Memory Caching** (TTLCache): Fast, local caching using Python's memory
+2. **Redis Caching**: Distributed caching with Redis for scalable applications
+
+### **Caching Types**
+
+#### **In-Memory Caching**
+
+```python
+users = pgconnect.Table(
+    name="users",
+    connection=connection,
+    columns=columns,
+    cache=True,              # Enable in-memory caching
+    cache_key="id",          # Cache key for lookups
+    cache_ttl=300,           # TTL in seconds (5 minutes)
+    cache_maxsize=1000       # Maximum cache entries
+)
+```
+
+#### **Redis Caching**
+
+```python
+# Set up Redis connection
+redis_connection = pgconnect.RedisConnection(
+    host='localhost',
+    port=6379,
+    password='your_password',
+    decode_responses=True
+)
+
+users = pgconnect.Table(
+    name="users",
+    connection=connection,
+    columns=columns,
+    redis_cache=True,              # Enable Redis caching
+    redis_connection=redis_connection,
+    cache_key="id",                # Cache key for lookups
+    cache_ttl=300                  # TTL in seconds (5 minutes)
+)
+```
+
+### **RecordLike Objects**
+
+Cached database records are returned as **RecordLike objects** that behave exactly like `asyncpg.Record`:
+
+```python
+# Insert and cache a user
+user = await users.insert(name="John", email="john@example.com")
+
+# Get from cache - returns RecordLike object
+cached_user = await users.getCache("user_1")
+
+# Access data like asyncpg.Record
+print(cached_user.name)           # Attribute access
+print(cached_user['email'])       # Dictionary access
+print(cached_user.get('age', 0))  # get() method with default
+print(len(cached_user))           # Length
+print('name' in cached_user)      # Membership test
+
+# Iterate over values
+for value in cached_user:
+    print(value)
+
+# Get keys, values, items
+for key in cached_user.keys():
+    print(key)
+```
 
 ### **Benefits of Caching**
 
-1. **Reduced Latency:** Queries can be served directly from the cache, reducing the time spent waiting for a response from the database.
-2. **Lower Database Load:** Cached results reduce the number of queries sent to the database, freeing up resources for other operations.
-3. **Improved Scalability:** Applications with high read-heavy traffic can benefit from caching to handle a larger number of requests efficiently.
+1. **Reduced Latency:** Queries served directly from cache (microseconds vs milliseconds)
+2. **Lower Database Load:** Fewer queries sent to PostgreSQL server
+3. **Improved Scalability:** Handle more concurrent requests efficiently
+4. **Distributed Caching:** Redis support for multi-instance applications
+5. **Record Compatibility:** Cached objects behave exactly like original `asyncpg.Record` objects
 
 ### **When to Use Caching**
 
-- For frequently read data that does not change often.
-- To improve the performance of applications with high traffic and concurrent requests.
-- To optimize expensive database queries.
+- **In-Memory Caching**: Single-instance applications, fast local access
+- **Redis Caching**: Multi-instance applications, shared cache across services
+- For frequently read data that doesn't change often
+- To optimize expensive database queries and improve response times
 
-### **Caching Example**
+### **Advanced Caching Example**
 
 Here’s an example showing how caching can improve performance:
 
@@ -91,6 +173,12 @@ Performance Comparison:
 
 - Without Caching: Each query triggers a request to the PostgreSQL server, which involves network overhead and database processing time.
 - With Caching: After the first query, subsequent requests with the same parameters are served from the cache, reducing query time from milliseconds to microseconds.
+
+**Performance Comparison:**
+
+- **Without Caching:** Each query = PostgreSQL network request (5-50ms)
+- **With In-Memory Caching:** Cached queries served in microseconds
+- **With Redis Caching:** Distributed cache across multiple instances
 
 By using caching strategically in your application, you can significantly improve response times and reduce database workload.
 
@@ -137,8 +225,8 @@ async def main():
                 type=pgconnect.DataType.TIMESTAMP().default("NOW()")
             )
         ],
-        cache=True,
-        cache_key="id"
+        cache=True,         # Enable in-memory caching
+        cache_key="id"      # Cache by ID field
     )
 
     await users.create()
@@ -147,6 +235,8 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
 ```
+
+**Note:** The above example uses in-memory caching. For Redis caching, replace `cache=True` with `redis_cache=True` and add a `redis_connection` parameter.
 
 ### Inserting Data
 
@@ -184,6 +274,26 @@ await users.delete(id=1)
 ```
 
 Here, this is deleting the row from the `users` table where the `id` is `1`.
+
+### Cache Operations
+
+```python
+# Set cache value
+await users.setCache("user_123", user_data)
+
+# Get cache value (returns RecordLike object for records)
+cached_user = await users.getCache("user_123")
+
+# Check if cache key exists
+exists = await users.cacheExists("user_123")
+
+# Clear Redis cache for table
+await users.clear_redis_cache()
+
+# Ping Redis connection
+ping_time = await users.pingRedis()
+print(f"Redis ping: {ping_time}ms")
+```
 
 ### Counting Rows
 

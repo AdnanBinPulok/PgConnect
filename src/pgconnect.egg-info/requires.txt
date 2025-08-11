@@ -1,2 +1,3 @@
 asyncpg
 cachetools
+redis
