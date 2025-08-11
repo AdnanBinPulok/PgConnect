@@ -17,7 +17,8 @@ class Table:
             cache_key: Optional[str] = None,
             cache_ttl: Optional[int] = None,  # Change to Optional[int]
             cache_maxsize: int = 1000,
-            indexes: Optional[List[Dict[str, Any]]] = None
+            indexes: Optional[List[Dict[str, Any]]] = None,
+            fetch_timeout: int = 5
     ) -> None:
         """
         Initializes the Table object.
@@ -42,7 +43,7 @@ class Table:
             raise ValueError("cache_key must be provided if cache is enabled")
         
         self.caches = TTLCache(maxsize=cache_maxsize, ttl=self.cache_ttl) if cache else None
-        self.timeout = 5  # Set the timeout to 5 seconds
+        self.timeout = fetch_timeout  # Set the timeout to the provided fetch_timeout
         self.indexes = indexes if indexes is not None else []
 
     def clear_cache(self):
@@ -123,6 +124,9 @@ class Table:
             for index in existing_indexes:
                 index_name = index['indexname']
                 if index_name == f"{self.name}_pkey":
+                    continue
+                all_columns_indexes_possibles = [f"{self.name}_{column.name}_key" for column in self.columns]
+                if index_name in all_columns_indexes_possibles:
                     continue
                 if self.indexes:
                     if not any(index_name == idx.get("name", None) for idx in self.indexes):
@@ -292,6 +296,66 @@ class Table:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.release_connection()
 
+    async def insert_many(self, columns: List[str], values: List[Dict[str, Any]]):
+        """
+        Inserts multiple rows into the table.
+
+        :param columns: The list of column names to insert.
+        :param values: A list of dictionaries containing the column values for each row.
+        :raises ValueError: If no valid columns are provided or if values do not match columns.
+        :raises RuntimeError: If there is a database error.
+        """
+        try:
+            if not columns or not values:
+                raise ValueError("No valid columns or values provided")
+
+            filtered_columns = [column for column in self.columns if column.name in columns]
+            if not filtered_columns:
+                raise ValueError("No valid columns provided")
+
+            columns_clause = ", ".join(column.name for column in filtered_columns)
+            
+            # Build multi-row VALUES clause
+            value_rows = []
+            query_values = []
+            param_index = 1
+            
+            for value in values:
+                row_placeholders = []
+                for index, column in enumerate(filtered_columns):
+                    row_placeholders.append(f"${param_index}")
+                    query_values.append(value[index])
+                    param_index += 1
+                value_rows.append(f"({', '.join(row_placeholders)})")
+            
+            values_clause = ", ".join(value_rows)
+            query = f"INSERT INTO {self.name} ({columns_clause}) VALUES {values_clause} RETURNING *"
+
+            connection = await self._get_connection()
+            await self.ensure_connection_available(connection)
+
+            rows = await connection.fetch(query, *query_values, timeout=self.timeout)
+
+            if self.cache:
+                for row in rows:
+                    cache_key = self._get_cache_key(**row)
+                    if cache_key:
+                        self.caches[cache_key] = row
+
+            return rows
+        except asyncpg.PostgresError as e:
+            print(f"Failed to insert many into table {self.name}: {e}")
+            return None
+        except ValueError as e:
+            print(f"ValueError: {e}")
+            return None
+        except Exception as e:
+            print(traceback.format_exc())
+            return None
+        finally:
+            if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
+                await connection.release_connection()
+
 
     async def update(self, where: Dict[str, Any], **kwargs):
         """
@@ -409,27 +473,17 @@ class Table:
         :param where: A dictionary with column names as keys and values/filters as values.
         Example:
             table.select('name', 'age', age=Filters.Between(18, 30), name=Filters.Like('John'))
+        Warning:
+            This function does not support caching.
         """
         try:
             connection = await self._get_connection()
-            
-            # Check cache first if enabled
-            cache_key = self._get_cache_key(**where)
-            if self.cache and cache_key and cache_key in self.caches:
-                return [self.caches[cache_key]]
-
             columns_clause = ", ".join(columns) if columns else "*"
             where_clause, params = await self._build_where_clause(where)
             query = f"SELECT {columns_clause} FROM {self.name} WHERE {where_clause}"
 
             await self.ensure_connection_available(connection)
             rows = await connection.fetch(query, *params, timeout=self.timeout)
-
-            if self.cache:
-                for row in rows:
-                    cache_key = self._get_cache_key(**row)
-                    if cache_key:
-                        self.caches[cache_key] = row
             return rows
         except asyncpg.PostgresError as e:
             print(f"Failed to select from table {self.name}: {e}")
