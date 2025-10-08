@@ -281,6 +281,7 @@ class RedisConnection:
             port: int,
             password: str,
             db: str | int = 0,
+            max_connections: int = 10,
             decode_responses: bool = True,
     ):
         """
@@ -296,9 +297,9 @@ class RedisConnection:
             None
         """
         pool:ConnectionPool = ConnectionPool(
-            max_connections=100, 
-            host=host, 
-            port=port, 
+            max_connections=max_connections,
+            host=host,
+            port=port,
             password=password,
             db=db,
             decode_responses=decode_responses

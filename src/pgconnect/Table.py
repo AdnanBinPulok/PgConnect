@@ -66,9 +66,25 @@ class Table:
         """
         Clears the cache for the table.
         """
-        if not self.cache:
+        if not self.cache and not self.redis_cache:
             raise ValueError("Cache is not enabled")
-        self.caches.clear()
+        if self.cache:
+            self.caches.clear()
+    
+    async def clear_cache_async(self):
+        """
+        Asynchronously clears the cache for the table.
+        Recommended if you need to clear the cache of Redis.
+        """
+        if not self.cache and not self.redis_cache:
+            raise ValueError("Cache is not enabled")
+        if self.cache:
+            self.caches.clear()
+        elif self.redis_cache and self.redis_connection:
+            try:
+                await self.clear_redis_cache()
+            except Exception as e:
+                print(f"Error clearing Redis cache: {e}")
 
     def cacheEnabled(self) -> bool:
         """Checks if caching is enabled."""
@@ -95,6 +111,22 @@ class Table:
         else:
             return None
     
+    async def deleteCache(self, key: str) -> bool:
+        """Deletes a value from the cache."""
+        if not self.cacheEnabled():
+            return False
+        if self.cache:
+            return self.caches.pop(key, None) is not None
+        elif self.redis_cache and self.redis_connection:
+            try:
+                await self.redis_connection.delete(table_name=self.name, key=key)
+                return True
+            except Exception as e:
+                print(f"Error deleting cache from Redis: {e}")
+                return False
+        else:
+            return False
+
     async def getCache(self, key: str) -> Any:
         """Gets a value from the cache."""
         if not self.cacheEnabled():
@@ -177,11 +209,35 @@ class Table:
     def _get_cache_key(self, **kwargs):
         """
         Generates a string cache key from the provided keyword arguments.
+        Includes all conditions to prevent cache collisions.
         """
-        if self.cache_key:
-            if self.cache_key in [column.name for column in self.columns]:
-                return str(kwargs.get(self.cache_key)) if self.cache_key in kwargs else None
-        return None
+        if not kwargs:
+            return None
+        
+        # If caching is not enabled, return None
+        if not self.cacheEnabled():
+            return None
+            
+        # cache_key is guaranteed to exist if caching is enabled (enforced in constructor)
+        if self.cache_key in [column.name for column in self.columns]:
+            primary_key = self.cache_key
+            primary_value = kwargs.get(self.cache_key)
+            if primary_value is None:
+                return None
+                
+            # Sort kwargs to ensure consistent key generation
+            sorted_conditions = sorted(kwargs.items())
+            
+            # Primary cache key format: "primary_key:value|condition1:value1|condition2:value2"
+            other_conditions = [f"{k}:{v}" for k, v in sorted_conditions if k != primary_key]
+            if other_conditions:
+                return f"{primary_key}:{primary_value}|{'|'.join(other_conditions)}"
+            else:
+                return f"{primary_key}:{primary_value}"
+        
+        # This should never happen if caching is enabled, but fallback to all conditions
+        sorted_conditions = sorted(kwargs.items())
+        return "|".join([f"{k}:{v}" for k, v in sorted_conditions])
     
     async def ensure_connection_available(self, connection):
         """
