@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: pgconnect
-Version: 0.5.2
+Version: 0.6.0
 Summary: A PostgreSQL connection and ORM library
 Home-page: https://github.com/AdnanBinPulok/PgConnect
 Author: AdnanBinPulok

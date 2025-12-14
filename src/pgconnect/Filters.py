@@ -49,6 +49,22 @@ class In:
         else:
             return f"{field_name} IN ({','.join(placeholders)})"
 
+@dataclass
+class Increment:
+    value: Union[int, float]
+    
+    def to_sql(self, field_name: str, params: list) -> str:
+        params.append(self.value)
+        return f"{field_name} + ${len(params)}"
+
+@dataclass
+class Decrement:
+    value: Union[int, float]
+    
+    def to_sql(self, field_name: str, params: list) -> str:
+        params.append(self.value)
+        return f"{field_name} - ${len(params)}"
+
 class Filters:
     @staticmethod
     def Between(from_value: Any = None, to_value: Any = None) -> Between:
@@ -63,3 +79,11 @@ class Filters:
     @staticmethod
     def In(values: list) -> In:
         return In(values)
+    
+    @staticmethod
+    def Increment(value: Union[int, float]) -> Increment:
+        return Increment(value)
+    
+    @staticmethod
+    def Decrement(value: Union[int, float]) -> Decrement:
+        return Decrement(value)

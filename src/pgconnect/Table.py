@@ -278,7 +278,11 @@ class Table:
         Deletes existing indexes that are not defined in the current table schema.
         This is useful to clean up indexes that may have been created in previous versions of the table.
         """
+        if not self.indexes or len(self.indexes) == 0:
+            print(f"No indexes defined for table {self.name}. Skipping index deletion and creation.")
+            return
         try:
+
             if not await self.check_if_index_schema_correct():
                 self.indexes = []
                 print(f"Index schema for table {self.name} is not correct. Skipping index deletion and creation.")
@@ -310,8 +314,7 @@ class Table:
                     await connection.execute(drop_index_query, timeout=self.timeout)
 
             # Now create indexes defined in the schema
-            if self.indexes:
-                await self.create_indexes(existing_indexes)
+            await self.create_indexes(existing_indexes)
 
         except asyncpg.PostgresError as e:
             print(f"Failed to delete existing non-defined indexes for table {self.name}: {e}")
@@ -544,10 +547,40 @@ class Table:
                 raise ValueError("No valid columns provided")
 
             set_clause = ", ".join(f"{column.name} = ${i+1}" for i, column in enumerate(filtered_columns))
-            where_clause = " AND ".join(f"{key} = ${len(filtered_columns) + i + 1}" for i, key in enumerate(where.keys()))
+
+            # Build where clause and then re-index its parameter placeholders so
+            # they continue after the SET parameters. _build_where_clause() always
+            # generates placeholders starting at $1, which would clash with the
+            # SET placeholders. We need to offset them by len(filtered_columns).
+            where_clause, where_params = await self._build_where_clause(where)
+
+            # If there are where params, adjust their dollar indexes by offset
+            if where_params:
+                offset = len(filtered_columns)
+                parts = []
+                for i, part in enumerate(where_clause.split('$')):
+                    if i == 0:
+                        parts.append(part)
+                        continue
+                    if not part:
+                        parts.append(part)
+                        continue
+                    # extract leading digits (the original param index)
+                    num_end = 0
+                    while num_end < len(part) and part[num_end].isdigit():
+                        num_end += 1
+                    if num_end > 0:
+                        orig_idx = int(part[:num_end])
+                        new_idx = offset + orig_idx
+                        parts.append(f"{new_idx}{part[num_end:]}")
+                    else:
+                        parts.append(part)
+                where_clause = '$'.join(parts)
+
             query = f"UPDATE {self.name} SET {set_clause} WHERE {where_clause} RETURNING *"
-            
-            query_values = [kwargs[column.name] for column in filtered_columns] + list(where.values())
+
+            query_values = [kwargs[column.name] for column in filtered_columns]
+            query_values.extend(where_params)
 
             connection = await self._get_connection()
             # if connection is busy wait 1 second and try again
@@ -587,15 +620,14 @@ class Table:
             if not where:
                 raise ValueError("No conditions provided for delete")
 
-            where_clause = " AND ".join(f"{key} = ${i+1}" for i, key in enumerate(where.keys()))
+            where_clause, where_params = await self._build_where_clause(where)
             query = f"DELETE FROM {self.name} WHERE {where_clause} RETURNING *"
             
-            query_values = list(where.values())
 
             connection = await self._get_connection()
             # if connection is busy wait 1 second and try again
             await self.ensure_connection_available(connection)
-            rows = await connection.fetch(query, *query_values, timeout=self.timeout)
+            rows = await connection.fetch(query, *where_params, timeout=self.timeout)
 
             if self.cacheEnabled():
                 for row in rows:
