@@ -307,40 +307,58 @@ class RedisConnection:
         self.redis: Redis = Redis(connection_pool=pool)
 
     def _serialize_value(self, value: Any) -> str:
-        """Serialize a value for Redis storage"""
-        if value is None:
-            return json.dumps({"type": "none", "value": None})
-        elif isinstance(value, (str, int, float, bool)):
-            return json.dumps({"type": "primitive", "value": value})
-        elif isinstance(value, datetime.datetime):
-            return json.dumps({"type": "datetime", "value": value.isoformat()})
-        # Handle asyncpg.Record objects
-        elif hasattr(value, '_mapping') or str(type(value)) == "<class 'asyncpg.Record'>":
-            # Convert Record to dict, handling datetime objects
-            record_dict = {}
-            for key, val in dict(value).items():
-                if isinstance(val, datetime.datetime):
-                    record_dict[key] = val.isoformat()
-                else:
-                    record_dict[key] = val
-            return json.dumps({"type": "record", "value": record_dict})
-        elif isinstance(value, (list, tuple)):
-            serialized_items = []
-            for item in value:
-                if hasattr(item, '_mapping') or str(type(item)) == "<class 'asyncpg.Record'>":
-                    # Convert Record to dict, handling datetime objects
-                    record_dict = {}
-                    for key, val in dict(item).items():
-                        if isinstance(val, datetime.datetime):
-                            record_dict[key] = val.isoformat()
-                        else:
-                            record_dict[key] = val
-                    serialized_items.append({"type": "record", "value": record_dict})
-                else:
-                    serialized_items.append({"type": "primitive", "value": item})
-            return json.dumps({"type": "list", "value": serialized_items})
-        else:
-            return json.dumps({"type": "string", "value": str(value)})
+            """Serialize a value for Redis/Valkey storage (OS-safe)."""
+
+            if value is None:
+                return json.dumps({"type": "none", "value": None})
+
+            if isinstance(value, (str, int, float, bool)):
+                return json.dumps({"type": "primitive", "value": value})
+
+            if isinstance(value, datetime.datetime):
+                return json.dumps({
+                    "type": "datetime",
+                    "value": value.isoformat()
+                })
+
+            # asyncpg.Record (OS-safe)
+            if isinstance(value, asyncpg.Record):
+                return json.dumps({
+                    "type": "record",
+                    "value": {
+                        k: (v.isoformat() if isinstance(v, datetime.datetime) else v)
+                        for k, v in dict(value).items()
+                    }
+                })
+
+            if isinstance(value, (list, tuple)):
+                return json.dumps({
+                    "type": "list",
+                    "value": [
+                        {
+                            "type": "record",
+                            "value": {
+                                k: (v.isoformat() if isinstance(v, datetime.datetime) else v)
+                                for k, v in dict(item).items()
+                            }
+                        } if isinstance(item, asyncpg.Record)
+                        else {
+                            "type": "datetime",
+                            "value": item.isoformat()
+                        } if isinstance(item, datetime.datetime)
+                        else {
+                            "type": "primitive",
+                            "value": item
+                        }
+                        for item in value
+                    ]
+                })
+
+            # Fallback
+            return json.dumps({
+                "type": "string",
+                "value": str(value)
+            })
     
     def _deserialize_value(self, value: str) -> Any:
         """Deserialize a value from Redis storage"""

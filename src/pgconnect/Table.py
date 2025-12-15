@@ -6,7 +6,7 @@ from typing import Optional, List, Any, Dict
 from . import Connection, RedisConnection
 from cachetools import TTLCache
 import asyncio
-from .Filters import Between, Like, In
+from .Filters import Between, Like, In, Increment, Decrement
 
 
 class Table:
@@ -22,7 +22,8 @@ class Table:
             cache_ttl: Optional[int] = None,  # Change to Optional[int]
             cache_maxsize: int = 1000,
             indexes: Optional[List[Dict[str, Any]]] = None,
-            fetch_timeout: int = 5
+            fetch_timeout: int = 5,
+            debug_mode: bool = False
     ) -> None:
         """
         Initializes the Table object.
@@ -45,6 +46,8 @@ class Table:
         self.cache_ttl = cache_ttl if cache_ttl is not None else 0  # Ensure cache_ttl is a valid number
         self.cache_maxsize = cache_maxsize
         self._conn = None  # Initialize the connection attribute
+
+        self.__debug = debug_mode  # Internal debug flag
 
         if cache and not cache_key:
             raise ValueError("cache_key must be provided if cache is enabled")
@@ -103,6 +106,8 @@ class Table:
             return True
         elif self.redis_cache and self.redis_connection:
             try:
+                if self.__debug:
+                    print(f"Setting cache in Redis for table {self.name}, key({type(key)}): {key}, value({type(value)}): {value}, ttl: {self.cache_ttl}")
                 await self.redis_connection.set(table_name=self.name, key=key, value=value, ttl=self.cache_ttl)
                 return True
             except Exception as e:
@@ -206,7 +211,7 @@ class Table:
     async def _get_connection(self):
         return await self.connection.get_connection()
 
-    def _get_cache_key(self, **kwargs):
+    def _get_cache_key(self, **kwargs,):
         """
         Generates a string cache key from the provided keyword arguments.
         Includes all conditions to prevent cache collisions.
@@ -228,12 +233,7 @@ class Table:
             # Sort kwargs to ensure consistent key generation
             sorted_conditions = sorted(kwargs.items())
             
-            # Primary cache key format: "primary_key:value|condition1:value1|condition2:value2"
-            other_conditions = [f"{k}:{v}" for k, v in sorted_conditions if k != primary_key]
-            if other_conditions:
-                return f"{primary_key}:{primary_value}|{'|'.join(other_conditions)}"
-            else:
-                return f"{primary_key}:{primary_value}"
+            return f"{primary_key}:{primary_value}"
         
         # This should never happen if caching is enabled, but fallback to all conditions
         sorted_conditions = sorted(kwargs.items())
@@ -546,17 +546,18 @@ class Table:
             if not filtered_columns:
                 raise ValueError("No valid columns provided")
 
-            set_clause = ", ".join(f"{column.name} = ${i+1}" for i, column in enumerate(filtered_columns))
+            # Build SET clause and collect parameters
+            set_clause, query_values = self._build_set_clause(filtered_columns, kwargs)
 
             # Build where clause and then re-index its parameter placeholders so
             # they continue after the SET parameters. _build_where_clause() always
             # generates placeholders starting at $1, which would clash with the
-            # SET placeholders. We need to offset them by len(filtered_columns).
+            # SET placeholders. We need to offset them by len(query_values).
             where_clause, where_params = await self._build_where_clause(where)
 
             # If there are where params, adjust their dollar indexes by offset
             if where_params:
-                offset = len(filtered_columns)
+                offset = len(query_values)
                 parts = []
                 for i, part in enumerate(where_clause.split('$')):
                     if i == 0:
@@ -579,7 +580,6 @@ class Table:
 
             query = f"UPDATE {self.name} SET {set_clause} WHERE {where_clause} RETURNING *"
 
-            query_values = [kwargs[column.name] for column in filtered_columns]
             query_values.extend(where_params)
 
             connection = await self._get_connection()
@@ -668,6 +668,29 @@ class Table:
                 conditions.append(f"{key} = ${len(params)}")
 
         return " AND ".join(conditions), params
+
+    def _build_set_clause(self, filtered_columns: List[Column], kwargs: Dict[str, Any]) -> tuple[str, list]:
+        """
+        Build SET clause from column updates.
+        Handles regular values, Increment, and Decrement operations.
+        Returns tuple of (set_clause, query_values)
+        """
+        set_parts = []
+        query_values = []
+        
+        for column in filtered_columns:
+            value = kwargs[column.name]
+            if isinstance(value, (Increment, Decrement)):
+                # Use the to_sql method to generate the SQL expression
+                sql_expr = value.to_sql(column.name, query_values)
+                set_parts.append(f"{column.name} = {sql_expr}")
+            else:
+                # Regular value - add to params and create placeholder
+                query_values.append(value)
+                set_parts.append(f"{column.name} = ${len(query_values)}")
+        
+        set_clause = ", ".join(set_parts)
+        return set_clause, query_values
 
     async def select(self, *columns, **where):
         """
@@ -1185,4 +1208,3 @@ class Table:
         finally:
             if connection and isinstance(self.connection.connection, asyncpg.pool.Pool):
                 await connection.release_connection()
-
