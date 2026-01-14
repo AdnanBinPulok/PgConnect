@@ -211,31 +211,37 @@ class Table:
     async def _get_connection(self):
         return await self.connection.get_connection()
 
-    def _get_cache_key(self, **kwargs,):
+    def _get_cache_key(self, _only_key: bool= False, **kwargs):
         """
         Generates a string cache key from the provided keyword arguments.
         Includes all conditions to prevent cache collisions.
         """
         if not kwargs:
             return None
-        
+
         # If caching is not enabled, return None
         if not self.cacheEnabled():
             return None
-            
+
         # cache_key is guaranteed to exist if caching is enabled (enforced in constructor)
         if self.cache_key in [column.name for column in self.columns]:
             primary_key = self.cache_key
             primary_value = kwargs.get(self.cache_key)
             if primary_value is None:
                 return None
-                
-            # Sort kwargs to ensure consistent key generation
-            sorted_conditions = sorted(kwargs.items())
+
+            # If kwargs contains only the primary cache key, return the simple key
+
+            if primary_key not in kwargs:
+                return None
             
+            if _only_key:
+                if len(kwargs) != 1:
+                    return None
+                
             return f"{primary_key}:{primary_value}"
-        
-        # This should never happen if caching is enabled, but fallback to all conditions
+
+        # Fallback: deterministically join all provided conditions
         sorted_conditions = sorted(kwargs.items())
         return "|".join([f"{k}:{v}" for k, v in sorted_conditions])
     
@@ -455,7 +461,10 @@ class Table:
             if self.cacheEnabled():
                 cache_key = self._get_cache_key(**row)
                 if cache_key:
-                    await self.setCache(cache_key, row)
+                    try:
+                        asyncio.create_task(self.setCache(cache_key, row))
+                    except Exception as e:
+                        print(f"Error setting cache asynchronously: {e}")
 
             return row
         except asyncpg.PostgresError as e:
@@ -515,7 +524,10 @@ class Table:
                 for row in rows:
                     cache_key = self._get_cache_key(**row)
                     if cache_key:
-                        await self.setCache(cache_key, row)
+                        try:
+                            asyncio.create_task(self.setCache(cache_key, row))
+                        except Exception as e:
+                            print(f"Error setting cache asynchronously: {e}")
 
             return rows
         except asyncpg.PostgresError as e:
@@ -591,7 +603,10 @@ class Table:
                 for row in rows:
                     cache_key = self._get_cache_key(**row)
                     if cache_key:
-                        await self.setCache(cache_key, row)
+                        try:
+                            asyncio.create_task(self.setCache(cache_key, row))
+                        except Exception as e:
+                            print(f"Error setting cache asynchronously: {e}")
 
             return rows
         except asyncpg.PostgresError as e:
@@ -734,7 +749,7 @@ class Table:
             connection = await self._get_connection()
 
             # Check cache first if enabled
-            cache_key = self._get_cache_key(**where)
+            cache_key = self._get_cache_key(**where, _only_key=True)
             if self.cacheEnabled() and cache_key and await self.cacheExists(cache_key):
                 return await self.getCache(cache_key)
 
@@ -783,7 +798,10 @@ class Table:
                 for row in rows:
                     cache_key = self._get_cache_key(**row)
                     if cache_key:
-                        await self.setCache(cache_key, row)
+                        try:
+                            asyncio.create_task(self.setCache(cache_key, row))
+                        except Exception as e:
+                            print(f"Error setting cache asynchronously: {e}")
             return rows
         except asyncpg.PostgresError as e:
             print(f"Failed to get rows from table {self.name}: {e}")
@@ -829,7 +847,10 @@ class Table:
                 for row in rows:
                     cache_key = self._get_cache_key(**row)
                     if cache_key:
-                        await self.setCache(cache_key, row)
+                        try:
+                            asyncio.create_task(self.setCache(cache_key, row))
+                        except Exception as e:
+                            print(f"Error setting cache asynchronously: {e}")
             return rows
         except asyncpg.PostgresError as e:
             print(f"Failed to get paginated rows from table {self.name}: {e}")
