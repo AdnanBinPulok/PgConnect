@@ -284,9 +284,6 @@ class Table:
         Deletes existing indexes that are not defined in the current table schema.
         This is useful to clean up indexes that may have been created in previous versions of the table.
         """
-        if not self.indexes or len(self.indexes) == 0:
-            print(f"No indexes defined for table {self.name}. Skipping index deletion and creation.")
-            return
         try:
 
             if not await self.check_if_index_schema_correct():
